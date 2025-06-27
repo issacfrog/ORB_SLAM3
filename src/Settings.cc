@@ -198,7 +198,7 @@ namespace ORB_SLAM3 {
             float cy = readParameter<float>(fSettings,"Camera1.cy",found);
 
             vCalibration = {fx, fy, cx, cy};
-
+            // calibration1_从yaml文件中读取内参，并创建Pinhole对象
             calibration1_ = new Pinhole(vCalibration);
             originalCalib1_ = new Pinhole(vCalibration);
 
@@ -499,6 +499,7 @@ namespace ORB_SLAM3 {
         cv::Mat R_r1_u1, R_r2_u2;
         cv::Mat P1, P2, Q;
 
+        // camera1DistortionCoef函数返回了内参和畸变参数
         cv::stereoRectify(K1,camera1DistortionCoef(),K2,camera2DistortionCoef(),newImSize_,
                           R12, t12,
                           R_r1_u1,R_r2_u2,P1,P2,Q,

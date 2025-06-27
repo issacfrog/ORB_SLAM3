@@ -42,18 +42,22 @@ namespace ORB_SLAM3
         // Computes the Hamming distance between two ORB descriptors
         static int DescriptorDistance(const cv::Mat &a, const cv::Mat &b);
 
+        // 关键帧和投影地图点之间的匹配
         // Search matches between Frame keypoints and projected MapPoints. Returns number of matches
         // Used to track the local map (Tracking)
         int SearchByProjection(Frame &F, const std::vector<MapPoint*> &vpMapPoints, const float th=3, const bool bFarPoints = false, const float thFarPoints = 50.0f);
 
+        // 当前帧和上一帧之间的匹配
         // Project MapPoints tracked in last frame into the current frame and search matches.
         // Used to track from previous frame (Tracking)
         int SearchByProjection(Frame &CurrentFrame, const Frame &LastFrame, const float th, const bool bMono);
 
+        // 当前帧和关键帧之间的匹配
         // Project MapPoints seen in KeyFrame into the Frame and search matches.
         // Used in relocalisation (Tracking)
         int SearchByProjection(Frame &CurrentFrame, KeyFrame* pKF, const std::set<MapPoint*> &sAlreadyFound, const float th, const int ORBdist);
 
+        // 经过了相似变换
         // Project MapPoints using a Similarity Transformation and search matches.
         // Used in loop detection (Loop Closing)
         int SearchByProjection(KeyFrame* pKF, Sophus::Sim3<float> &Scw, const std::vector<MapPoint*> &vpPoints, std::vector<MapPoint*> &vpMatched, int th, float ratioHamming=1.0);

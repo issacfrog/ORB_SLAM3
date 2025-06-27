@@ -95,6 +95,14 @@ KeyFrame::KeyFrame(Frame &F, Map *pMap, KeyFrameDatabase *pKFDB):
     mnOriginMapId = pMap->GetId();
 }
 
+/**
+ * @brief 计算词袋向量
+ * 1. 如果词袋向量和特征向量不为空，则直接返回
+ * 2. 否则，将描述子转换为特征向量
+ * 3. 使用词袋向量将特征向量转换为词袋向量
+ * 4. 将词袋向量和特征向量存储在KeyFrame中
+ * 
+ */
 void KeyFrame::ComputeBoW()
 {
     if(mBowVec.empty() || mFeatVec.empty())
@@ -102,6 +110,7 @@ void KeyFrame::ComputeBoW()
         vector<cv::Mat> vCurrentDesc = Converter::toDescriptorVector(mDescriptors);
         // Feature vector associate features with nodes in the 4th level (from leaves up)
         // We assume the vocabulary tree has 6 levels, change the 4 otherwise
+        // 词袋特征没有看
         mpORBvocabulary->transform(vCurrentDesc,mBowVec,mFeatVec,4);
     }
 }

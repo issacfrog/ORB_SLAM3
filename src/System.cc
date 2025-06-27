@@ -249,13 +249,33 @@ Sophus::SE3f System::TrackStereo(const cv::Mat &imLeft, const cv::Mat &imRight, 
         exit(-1);
     }
 
+    /// 执行去畸变操作
     cv::Mat imLeftToFeed, imRightToFeed;
     if(settings_ && settings_->needToRectify()){
+        // M1l, M2l, M1r, M2r 是对应的去畸变矩阵
         cv::Mat M1l = settings_->M1l();
         cv::Mat M2l = settings_->M2l();
         cv::Mat M1r = settings_->M1r();
         cv::Mat M2r = settings_->M2r();
 
+        // cv::remap函数用于图像重映射，主要功能是：
+        // 1. 根据映射矩阵对图像进行几何变换
+        // 2. 常用于图像去畸变、校正等操作
+        // 
+        // 函数签名：void cv::remap(InputArray src, OutputArray dst, InputArray map1, InputArray map2, int interpolation, int borderMode, const Scalar& borderValue)
+        // 
+        // 参数说明：
+        // - src: 输入图像
+        // - dst: 输出图像
+        // - map1: 第一个映射矩阵，可以是CV_32FC1或CV_16SC2类型
+        // - map2: 第二个映射矩阵，可以是CV_32FC1或CV_16SC2类型
+        // - interpolation: 插值方法，如cv::INTER_LINEAR
+        // - borderMode: 边界处理模式
+        // - borderValue: 边界填充值
+        //
+        // 在这里，M1l/M1r是x方向映射，M2l/M2r是y方向映射
+        // 通过这两个映射矩阵可以实现图像的去畸变和校正
+        // 
         cv::remap(imLeft, imLeftToFeed, M1l, M2l, cv::INTER_LINEAR);
         cv::remap(imRight, imRightToFeed, M1r, M2r, cv::INTER_LINEAR);
     }
@@ -268,6 +288,7 @@ Sophus::SE3f System::TrackStereo(const cv::Mat &imLeft, const cv::Mat &imRight, 
         imRightToFeed = imRight.clone();
     }
 
+    /// 模式设置
     // Check mode change
     {
         unique_lock<mutex> lock(mMutexMode);
@@ -312,6 +333,7 @@ Sophus::SE3f System::TrackStereo(const cv::Mat &imLeft, const cv::Mat &imRight, 
         for(size_t i_imu = 0; i_imu < vImuMeas.size(); i_imu++)
             mpTracker->GrabImuData(vImuMeas[i_imu]);
 
+    /// 执行双目图像跟踪
     // std::cout << "start GrabImageStereo" << std::endl;
     Sophus::SE3f Tcw = mpTracker->GrabImageStereo(imLeftToFeed,imRightToFeed,timestamp,filename);
 

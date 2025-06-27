@@ -149,6 +149,15 @@ public:
 
     float GetMinDistanceInvariance();
     float GetMaxDistanceInvariance();
+    /**
+     * @brief 这个函数 PredictScale 是 MapPoint 类中的一个重要方法，
+     * 用于预测地图点在给定距离下应该使用的图像金字塔层级。
+     * 这是 ORB-SLAM3 中实现尺度不变性的关键技术。
+     *
+     * @param currentDist 当前相机到地图点的距离
+     * @param pKF 关键帧
+     * @return int 
+     */
     int PredictScale(const float &currentDist, KeyFrame*pKF);
     int PredictScale(const float &currentDist, Frame* pF);
 

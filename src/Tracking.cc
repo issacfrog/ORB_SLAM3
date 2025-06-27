@@ -1453,6 +1453,7 @@ bool Tracking::GetStepByStep()
 
 Sophus::SE3f Tracking::GrabImageStereo(const cv::Mat &imRectLeft, const cv::Mat &imRectRight, const double &timestamp, string filename)
 {
+    /// 1.转为灰度图，注意ORB是在灰度通道上做的工作
     //cout << "GrabImageStereo" << endl;
 
     mImGray = imRectLeft;
@@ -1488,6 +1489,7 @@ Sophus::SE3f Tracking::GrabImageStereo(const cv::Mat &imRectLeft, const cv::Mat 
         }
     }
 
+    /// 2.创建Frame对象 区分单目、双目、IMU单目、IMU双目
     //cout << "Incoming frame creation" << endl;
 
     if (mSensor == System::STEREO && !mpCamera2)
@@ -1509,6 +1511,7 @@ Sophus::SE3f Tracking::GrabImageStereo(const cv::Mat &imRectLeft, const cv::Mat 
     vdStereoMatch_ms.push_back(mCurrentFrame.mTimeStereoMatch);
 #endif
 
+    /// 3.执行跟踪
     //cout << "Tracking start" << endl;
     Track();
     //cout << "Tracking end" << endl;
@@ -1631,6 +1634,7 @@ void Tracking::PreintegrateIMU()
         return;
     }
 
+    // mlQueueImuData用于存储批量的IMU数据
     mvImuFromLastFrame.clear();
     mvImuFromLastFrame.reserve(mlQueueImuData.size());
     if(mlQueueImuData.size() == 0)
@@ -1642,6 +1646,7 @@ void Tracking::PreintegrateIMU()
 
     while(true)
     {
+        // 取出图像帧间的IMU数据
         bool bSleep = false;
         {
             unique_lock<mutex> lock(mMutexImuQueue);
@@ -1680,10 +1685,12 @@ void Tracking::PreintegrateIMU()
         return;
     }
 
+    // 创建预积分对象，创建的时候默认为0
     IMU::Preintegrated* pImuPreintegratedFromLastFrame = new IMU::Preintegrated(mLastFrame.mImuBias,mCurrentFrame.mImuCalib);
 
     for(int i=0; i<n; i++)
     {
+        // 进行积分数据的插值
         float tstep;
         Eigen::Vector3f acc, angVel;
         if((i==0) && (i<(n-1)))
@@ -1735,6 +1742,13 @@ void Tracking::PreintegrateIMU()
 }
 
 
+/**
+ * @brief 注意这里实际使用了预积分的结果
+ * 差别是使用上一帧关键帧还是上一帧的
+ * 从逻辑上看只有获取IMU零偏的方式有些差异
+ * @return true 
+ * @return false 
+ */
 bool Tracking::PredictStateIMU()
 {
     if(!mCurrentFrame.mpPrevFrame)
@@ -1790,10 +1804,11 @@ void Tracking::ResetFrameIMU()
     // TODO To implement...
 }
 
-
+/// 核心追踪实现代码
 void Tracking::Track()
 {
-
+    /// 1.检查是否需要单步执行
+    //  单步执行模式，用于调试
     if (bStepByStep)
     {
         std::cout << "Tracking: Waiting to the next step" << std::endl;
@@ -1804,6 +1819,7 @@ void Tracking::Track()
 
     if(mpLocalMapper->mbBadImu)
     {
+        /// imu数据异常的时候，重置地图
         cout << "TRACK: Reset map because local mapper set the bad imu flag " << endl;
         mpSystem->ResetActiveMap();
         return;
@@ -1815,6 +1831,8 @@ void Tracking::Track()
         cout << "ERROR: There is not an active map in the atlas" << endl;
     }
 
+    /// 2.时间同步检查 && 一些初始化
+    // 地图初始化
     if(mState!=NO_IMAGES_YET)
     {
         if(mLastFrame.mTimeStamp>mCurrentFrame.mTimeStamp)
@@ -1831,7 +1849,6 @@ void Tracking::Track()
             // cout << "id last: " << mLastFrame.mnId << "    id curr: " << mCurrentFrame.mnId << endl;
             if(mpAtlas->isInertial())
             {
-
                 if(mpAtlas->isImuInitialized())
                 {
                     cout << "Timestamp jump detected. State set to LOST. Reseting IMU integration..." << endl;
@@ -1871,6 +1888,7 @@ void Tracking::Track()
 #ifdef REGISTER_TIMES
         std::chrono::steady_clock::time_point time_StartPreIMU = std::chrono::steady_clock::now();
 #endif
+        // 如果带IMU则进行预积分处理
         PreintegrateIMU();
 #ifdef REGISTER_TIMES
         std::chrono::steady_clock::time_point time_EndPreIMU = std::chrono::steady_clock::now();
@@ -1895,7 +1913,7 @@ void Tracking::Track()
         mbMapUpdated = true;
     }
 
-
+    // 双目or单目系统初始化
     if(mState==NOT_INITIALIZED)
     {
         if(mSensor==System::STEREO || mSensor==System::RGBD || mSensor==System::IMU_STEREO || mSensor==System::IMU_RGBD)
@@ -1933,6 +1951,7 @@ void Tracking::Track()
         if(!mbOnlyTracking)
         {
 
+            /// 利用上一帧和速度预测当前帧位姿
             // State OK
             // Local Mapping is activated. This is the normal behaviour, unless
             // you explicitly activate the "only tracking" mode.
@@ -2717,6 +2736,12 @@ void Tracking::CheckReplacedInLastFrame()
 }
 
 
+/**
+ * @brief 
+ * 
+ * @return true 
+ * @return false 
+ */
 bool Tracking::TrackReferenceKeyFrame()
 {
     // Compute Bag of Words vector
@@ -2744,6 +2769,10 @@ bool Tracking::TrackReferenceKeyFrame()
     // cout << " TrackReferenceKeyFrame mLastFrame.mTcw:  " << mLastFrame.mTcw << endl;
     Optimizer::PoseOptimization(&mCurrentFrame);
 
+    /// 外点剔除
+    // 1. 遍历当前帧的特征点
+    // 2. 检查匹配点是否匹配上，匹配上则指针不为空，否则为空
+    // 3. 同时执行特征点的增减
     // Discard outliers
     int nmatchesMap = 0;
     for(int i =0; i<mCurrentFrame.N; i++)
@@ -2751,6 +2780,7 @@ bool Tracking::TrackReferenceKeyFrame()
         //if(i >= mCurrentFrame.Nleft) break;
         if(mCurrentFrame.mvpMapPoints[i])
         {
+            // 如果是外点，则将匹配点置空，否则匹配数量增加
             if(mCurrentFrame.mvbOutlier[i])
             {
                 MapPoint* pMP = mCurrentFrame.mvpMapPoints[i];
@@ -2851,8 +2881,22 @@ void Tracking::UpdateLastFrame()
     }
 }
 
+/**
+ * @brief 带运动
+ * 
+ * 1. 更新上一帧的位姿
+ * 2. 如果IMU初始化且不需要重置IMU，则预测状态
+ * 3. 否则，使用运动模型更新当前帧的位姿
+ * 4. 使用ORB匹配器在当前帧和上一帧之间进行匹配
+ * 5. 如果匹配点数小于20，则使用更宽的窗口进行搜索
+ * 6. 如果匹配点数小于20，则返回false
+ *
+ * @return true 
+ * @return false 
+ */
 bool Tracking::TrackWithMotionModel()
 {
+    // 要求特征匹配的特征点相似度大于0.9
     ORBmatcher matcher(0.9,true);
 
     // Update last frame pose according to its reference keyframe
@@ -2870,9 +2914,7 @@ bool Tracking::TrackWithMotionModel()
         mCurrentFrame.SetPose(mVelocity * mLastFrame.GetPose());
     }
 
-
-
-
+    // 将当前帧的匹配点置空
     fill(mCurrentFrame.mvpMapPoints.begin(),mCurrentFrame.mvpMapPoints.end(),static_cast<MapPoint*>(NULL));
 
     // Project points seen in previous frame

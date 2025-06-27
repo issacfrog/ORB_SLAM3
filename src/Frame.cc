@@ -654,6 +654,18 @@ Eigen::Vector3f Frame::inRefCoordinates(Eigen::Vector3f pCw)
     return mRcw * pCw + mtcw;
 }
 
+/**
+ * @brief 获取在给定区域内的特征点
+ * 1.检查投影点搜索半径是否在图像范围内，如果不再则
+ * 2.计算要搜索的网格范围
+ * @param x 
+ * @param y 
+ * @param r 
+ * @param minLevel 
+ * @param maxLevel 
+ * @param bRight 
+ * @return vector<size_t> 
+ */
 vector<size_t> Frame::GetFeaturesInArea(const float &x, const float  &y, const float  &r, const int minLevel, const int maxLevel, const bool bRight) const
 {
     vector<size_t> vIndices;
@@ -662,6 +674,7 @@ vector<size_t> Frame::GetFeaturesInArea(const float &x, const float  &y, const f
     float factorX = r;
     float factorY = r;
 
+    /// 1 计算最大搜索格子的范围
     const int nMinCellX = max(0,(int)floor((x-mnMinX-factorX)*mfGridElementWidthInv));
     if(nMinCellX>=FRAME_GRID_COLS)
     {
@@ -686,16 +699,19 @@ vector<size_t> Frame::GetFeaturesInArea(const float &x, const float  &y, const f
         return vIndices;
     }
 
+    /// 2 搜索范围内的遍历
     const bool bCheckLevels = (minLevel>0) || (maxLevel>=0);
 
     for(int ix = nMinCellX; ix<=nMaxCellX; ix++)
     {
         for(int iy = nMinCellY; iy<=nMaxCellY; iy++)
         {
+            // 左右相机
             const vector<size_t> vCell = (!bRight) ? mGrid[ix][iy] : mGridRight[ix][iy];
             if(vCell.empty())
                 continue;
-
+            
+            // 
             for(size_t j=0, jend=vCell.size(); j<jend; j++)
             {
                 const cv::KeyPoint &kpUn = (Nleft == -1) ? mvKeysUn[vCell[j]]
@@ -713,6 +729,9 @@ vector<size_t> Frame::GetFeaturesInArea(const float &x, const float  &y, const f
                 const float distx = kpUn.pt.x-x;
                 const float disty = kpUn.pt.y-y;
 
+                // 如果特征点在搜索半径内，在将特征扔到vIndices中
+                // 注：个人感觉这里可以通过设置搜索的起点和终点的方式来直接从图像中获取特征点
+                // 这里分块的方式效率上如何提升暂时没有体会到
                 if(fabs(distx)<factorX && fabs(disty)<factorY)
                     vIndices.push_back(vCell[j]);
             }

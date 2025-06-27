@@ -1886,11 +1886,16 @@ namespace ORB_SLAM3
         return nmatches;
     }
 
+    // 当前帧与关键帧之间的投影匹配
     int ORBmatcher::SearchByProjection(Frame &CurrentFrame, KeyFrame *pKF, const set<MapPoint*> &sAlreadyFound, const float th , const int ORBdist)
     {
         int nmatches = 0;
 
         const Sophus::SE3f Tcw = CurrentFrame.GetPose();
+        // Ow是当前帧相机在世界坐标系下的位置
+        // Tcw是当前帧的位姿变换矩阵，从世界坐标系到相机坐标系
+        // Tcw.inverse()是从相机坐标系到世界坐标系的变换
+        // .translation()提取变换矩阵中的平移部分，即相机在世界坐标系下的位置
         Eigen::Vector3f Ow = Tcw.inverse().translation();
 
         // Rotation Histogram (to check rotation consistency)
@@ -1907,9 +1912,13 @@ namespace ORB_SLAM3
 
             if(pMP)
             {
+                // 1. 将地图点反投影到当前帧图像平面
+                // 2. 检查地图点是否在当前帧的图像平面内
+                // 3. 计算相机与地图点在世界坐标系下的距离 
                 if(!pMP->isBad() && !sAlreadyFound.count(pMP))
                 {
-                    //Project
+                    // 世界坐标系下的3D点投影到当前帧的相机坐标系下
+                    //Project  Pcam = Tcw * Pworld   Tcw是世界坐标系向相机坐标系的变换矩阵
                     Eigen::Vector3f x3Dw = pMP->GetWorldPos();
                     Eigen::Vector3f x3Dc = Tcw * x3Dw;
 
@@ -1924,18 +1933,25 @@ namespace ORB_SLAM3
                     Eigen::Vector3f PO = x3Dw-Ow;
                     float dist3D = PO.norm();
 
+                    // 最大与最小距离
                     const float maxDistance = pMP->GetMaxDistanceInvariance();
                     const float minDistance = pMP->GetMinDistanceInvariance();
 
+                    // 超出最大最小深度？
                     // Depth must be inside the scale pyramid of the image
                     if(dist3D<minDistance || dist3D>maxDistance)
                         continue;
 
+                    // 预测地图点在当前帧的图像金字塔层级
                     int nPredictedLevel = pMP->PredictScale(dist3D,&CurrentFrame);
 
+                    // 根据所在层级和阈值设定搜索半径
                     // Search in a window
                     const float radius = th*CurrentFrame.mvScaleFactors[nPredictedLevel];
 
+                    // 从当前图像中获取候选特征点
+                    // 搜索半径为当前层级对应的特征点搜索半径
+                    // 搜索范围为当前层级-1和当前层级+1
                     const vector<size_t> vIndices2 = CurrentFrame.GetFeaturesInArea(uv(0), uv(1), radius, nPredictedLevel-1, nPredictedLevel+1);
 
                     if(vIndices2.empty())
@@ -1946,6 +1962,7 @@ namespace ORB_SLAM3
                     int bestDist = 256;
                     int bestIdx2 = -1;
 
+                    // 遍历候选特征点
                     for(vector<size_t>::const_iterator vit=vIndices2.begin(); vit!=vIndices2.end(); vit++)
                     {
                         const size_t i2 = *vit;
@@ -1963,11 +1980,13 @@ namespace ORB_SLAM3
                         }
                     }
 
+                    // 如果匹配距离小于阈值，则认为匹配成功
                     if(bestDist<=ORBdist)
                     {
                         CurrentFrame.mvpMapPoints[bestIdx2]=pMP;
                         nmatches++;
 
+                        // 如果需要检查旋转方向的一直醒，则将角度差放到rotHist中等待下一步操作
                         if(mbCheckOrientation)
                         {
                             float rot = pKF->mvKeysUn[i].angle-CurrentFrame.mvKeysUn[bestIdx2].angle;
@@ -1985,6 +2004,7 @@ namespace ORB_SLAM3
             }
         }
 
+        // 如果进行旋转一致性检查，则将角度差放到rotHist中等待下一步操作
         if(mbCheckOrientation)
         {
             int ind1=-1;

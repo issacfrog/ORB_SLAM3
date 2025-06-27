@@ -107,6 +107,16 @@ public:
     Eigen::Vector3f inRefCoordinates(Eigen::Vector3f pCw);
 
     // Compute the cell of a keypoint (return false if outside the grid)
+    // cv::KeyPoint keypoint中的相关点在创建的时候可以指定相关参数
+    // class KeyPoint {
+    //     public:
+    //         cv::Point2f pt;        // 关键点的坐标 (x, y)
+    //         float size;            // 关键点的直径
+    //         float angle;           // 关键点的方向角度 (-1 表示未计算)
+    //         float response;        // 关键点的响应强度
+    //         int octave;            // 图像金字塔层级
+    //         int class_id;          // 关键点的类别ID
+    // };
     bool PosInGrid(const cv::KeyPoint &kp, int &posX, int &posY);
 
     vector<size_t> GetFeaturesInArea(const float &x, const float  &y, const float  &r, const int minLevel=-1, const int maxLevel=-1, const bool bRight = false) const;
@@ -220,6 +230,7 @@ public:
     float mThDepth;
 
     // Number of KeyPoints.
+    // 特征点的数量
     int N;
 
     // Vector of keypoints (original for visualization) and undistorted (actually used by the system).
@@ -249,6 +260,10 @@ public:
     // Keypoints are assigned to cells in a grid to reduce matching complexity when projecting MapPoints.
     static float mfGridElementWidthInv;
     static float mfGridElementHeightInv;
+    // 特征点网格 ORB-SLAM3 中，特征点网格是用于加速特征匹配的关键数据结构。
+    // 他将原始图像划分成多个网格，每个网格中包含一定数量的点 
+    // 在特征匹配时，只需要在特征点所在的网格中进行匹配，而不是在整个图像中进行匹配，从而大大提高了匹配效率。
+    // 这里典型的FRAME_GRID_COLS 和 FRAME_GRID_ROWS 分别定义为了64和48
     std::vector<std::size_t> mGrid[FRAME_GRID_COLS][FRAME_GRID_ROWS];
 
     IMU::Bias mPredBias;

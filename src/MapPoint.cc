@@ -518,7 +518,7 @@ int MapPoint::PredictScale(const float &currentDist, KeyFrame* pKF)
         unique_lock<mutex> lock(mMutexPos);
         ratio = mfMaxDistance/currentDist;
     }
-
+    // 计算金字塔层级
     int nScale = ceil(log(ratio)/pKF->mfLogScaleFactor);
     if(nScale<0)
         nScale = 0;

@@ -21,6 +21,12 @@
 namespace ORB_SLAM3
 {
 
+/**
+ * @brief 将描述子转换为特征向量
+ * 按行进行拆分
+ * @param Descriptors 
+ * @return std::vector<cv::Mat> 
+ */
 std::vector<cv::Mat> Converter::toDescriptorVector(const cv::Mat &Descriptors)
 {
     std::vector<cv::Mat> vDesc;
@@ -309,6 +315,10 @@ Sophus::SE3<float> Converter::toSophus(const cv::Mat &T) {
 Sophus::Sim3f Converter::toSophus(const g2o::Sim3& S) {
     return Sophus::Sim3f(Sophus::RxSO3d((float)S.scale(), S.rotation().matrix()).cast<float>() ,
                          S.translation().cast<float>());
+}
+
+void Converter::updateIntegralTime(double &dT, double dt) {
+    dT += dt;
 }
 
 } //namespace ORB_SLAM

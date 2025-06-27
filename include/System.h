@@ -16,6 +16,9 @@
 * If not, see <http://www.gnu.org/licenses/>.
 */
 
+/**
+ * 支持单目、双目、RGBD等传感器，通过函数来加载数据
+*/
 
 #ifndef SYSTEM_H
 #define SYSTEM_H

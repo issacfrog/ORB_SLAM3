@@ -174,6 +174,9 @@ void Preintegrated::Reintegrate()
         IntegrateNewMeasurement(aux[i].a,aux[i].w,aux[i].t);
 }
 
+/**
+ * 积分新的测量值
+ */
 void Preintegrated::IntegrateNewMeasurement(const Eigen::Vector3f &acceleration, const Eigen::Vector3f &angVel, const float &dt)
 {
     mvMeasurements.push_back(integrable(acceleration,angVel,dt));
@@ -188,6 +191,7 @@ void Preintegrated::IntegrateNewMeasurement(const Eigen::Vector3f &acceleration,
     Eigen::Matrix<float,9,6> B;
     B.setZero();
 
+    // 加速度和角速度
     Eigen::Vector3f acc, accW;
     acc << acceleration(0)-b.bax, acceleration(1)-b.bay, acceleration(2)-b.baz;
     accW << angVel(0)-b.bwx, angVel(1)-b.bwy, angVel(2)-b.bwz;
