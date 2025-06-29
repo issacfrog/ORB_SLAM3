@@ -1673,10 +1673,12 @@ namespace ORB_SLAM3
         return nFound;
     }
 
+    /// 最近两帧的匹配
     int ORBmatcher::SearchByProjection(Frame &CurrentFrame, const Frame &LastFrame, const float th, const bool bMono)
     {
         int nmatches = 0;
 
+        /// 1. 计算当前帧与上一帧之间的想退位姿tlc
         // Rotation Histogram (to check rotation consistency)
         vector<int> rotHist[HISTO_LENGTH];
         for(int i=0;i<HISTO_LENGTH;i++)
@@ -1689,6 +1691,10 @@ namespace ORB_SLAM3
         const Sophus::SE3f Tlw = LastFrame.GetPose();
         const Eigen::Vector3f tlc = Tlw * twc;
 
+        /// 2. 判断搜索方向
+        // mb是双目相机的基线长度(baseline)，用于判断相机运动方向
+        // 当tlc(2) > mb时，说明相机向前运动，特征点在图像上的移动方向是向前的
+        // 当tlc(2) < -mb时，说明相机向后运动，特征点在图像上的移动方向是向后的
         const bool bForward = tlc(2)>CurrentFrame.mb && !bMono;
         const bool bBackward = -tlc(2)>CurrentFrame.mb && !bMono;
 
@@ -1699,6 +1705,7 @@ namespace ORB_SLAM3
             {
                 if(!LastFrame.mvbOutlier[i])
                 {
+                    /// 3. 将地图点反投影到当前帧图像平面
                     // Project
                     Eigen::Vector3f x3Dw = pMP->GetWorldPos();
                     Eigen::Vector3f x3Dc = Tcw * x3Dw;
@@ -1725,6 +1732,7 @@ namespace ORB_SLAM3
 
                     vector<size_t> vIndices2;
 
+                    // 向前向后或者判断不出来的时候 去不同的层搜索
                     if(bForward)
                         vIndices2 = CurrentFrame.GetFeaturesInArea(uv(0),uv(1), radius, nLastOctave);
                     else if(bBackward)
@@ -1748,11 +1756,11 @@ namespace ORB_SLAM3
                             if(CurrentFrame.mvpMapPoints[i2]->Observations()>0)
                                 continue;
 
-                        if(CurrentFrame.Nleft == -1 && CurrentFrame.mvuRight[i2]>0)
+                        if(CurrentFrame. == -1 && CurrentFrame.mvuRight[i2]>0)
                         {
                             const float ur = uv(0) - CurrentFrame.mbf*invzc;
                             const float er = fabs(ur - CurrentFrame.mvuRight[i2]);
-                            if(er>radius)
+                            if(er>radius)Nleft
                                 continue;
                         }
 
@@ -1971,6 +1979,7 @@ namespace ORB_SLAM3
 
                         const cv::Mat &d = CurrentFrame.mDescriptors.row(i2);
 
+                        // 计算特征描述子之间的汉明距离
                         const int dist = DescriptorDistance(dMP,d);
 
                         if(dist<bestDist)
@@ -2005,6 +2014,8 @@ namespace ORB_SLAM3
         }
 
         // 如果进行旋转一致性检查，则将角度差放到rotHist中等待下一步操作
+        // 过对匹配点的主方向差构建直方图，仅保留方向差最集中的前三个方向的匹配点，
+        // 从而剔除方向不一致的误匹配点对，核心想法是通过主方向来剔除外点
         if(mbCheckOrientation)
         {
             int ind1=-1;
@@ -2029,6 +2040,7 @@ namespace ORB_SLAM3
         return nmatches;
     }
 
+    // 
     void ORBmatcher::ComputeThreeMaxima(vector<int>* histo, const int L, int &ind1, int &ind2, int &ind3)
     {
         int max1=0;

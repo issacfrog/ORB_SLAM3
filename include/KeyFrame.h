@@ -308,15 +308,18 @@ public:
     // The following variables are accesed from only 1 thread or never change (no mutex needed).
 public:
 
-    static long unsigned int nNextId;
-    long unsigned int mnId;
-    const long unsigned int mnFrameId;
+    static long unsigned int nNextId; // 全局唯一id
+    long unsigned int mnId;           // 当前关键帧id 系统中唯一识别
+    const long unsigned int mnFrameId;// 所属帧序列的id 表示是第几帧生成的关键帧
 
     const double mTimeStamp;
 
+    /// 网格参数用于加速特征匹配 对于ORB-SLAM3来说 网格参数是64和48
+    // 计算上是mnGridCols和mnGridRows直接根据宏定义，而后mfGridElementWidthInv等根据图像像素数量大小和
+    // 和网格数量计算倒数得到
     // Grid (to speed up feature matching)
-    const int mnGridCols;
-    const int mnGridRows;
+    const int mnGridCols;                   
+    const int mnGridRows;                           
     const float mfGridElementWidthInv;
     const float mfGridElementHeightInv;
 
@@ -348,13 +351,15 @@ public:
     bool mbCurrentPlaceRecognition;
 
 
+    /// 闭环检测变量
+    // 闭环前后的位姿和速度
     // Variables used by loop closing
     Sophus::SE3f mTcwGBA;
     Sophus::SE3f mTcwBefGBA;
     Eigen::Vector3f mVwbGBA;
     Eigen::Vector3f mVwbBefGBA;
     IMU::Bias mBiasGBA;
-    long unsigned int mnBAGlobalForKF;
+    long unsigned int mnBAGlobalForKF;  // 闭环检测对应的关键帧id
 
     // Variables used by merging
     Sophus::SE3f mTcwMerge;
@@ -370,23 +375,31 @@ public:
 
     float mfScale;
 
+    /// 相机内参
     // Calibration parameters
-    const float fx, fy, cx, cy, invfx, invfy, mbf, mb, mThDepth;
-    cv::Mat mDistCoef;
+    const float fx, fy;             // 焦距
+    const float cx, cy;             // 主点
+    const float invfx, invfy;       // 焦距倒数
+    const float mbf, mb, mThDepth;  // 基线长度 相机基线长度 深度阈值
+    cv::Mat mDistCoef;              // 畸变系数 
 
+    /// 特征点数量
     // Number of KeyPoints
     const int N;
 
     // KeyPoints, stereo coordinate and descriptors (all associated by an index)
-    const std::vector<cv::KeyPoint> mvKeys;
-    const std::vector<cv::KeyPoint> mvKeysUn;
+    const std::vector<cv::KeyPoint> mvKeys;     // 特征点
+    const std::vector<cv::KeyPoint> mvKeysUn;   // 去畸变后特征点
+    // mvuRight 双目右目中特征点的横坐标，单目为负值。
     const std::vector<float> mvuRight; // negative value for monocular points
+    // mvDepth 深度图中每个特征点的深度值（如果有）。
     const std::vector<float> mvDepth; // negative value for monocular points
-    const cv::Mat mDescriptors;
+    const cv::Mat mDescriptors;      // 特征描述子
 
+    /// 词袋检测
     //BoW
-    DBoW2::BowVector mBowVec;
-    DBoW2::FeatureVector mFeatVec;
+    DBoW2::BowVector mBowVec;       // 词袋向量
+    DBoW2::FeatureVector mFeatVec;  // 特征向量
 
     // Pose relative to parent (this is computed when bad flag is activated)
     Sophus::SE3f mTcp;
@@ -492,8 +505,9 @@ protected:
     // Backup for Cameras
     unsigned int mnBackupIdCamera, mnBackupIdCamera2;
 
+    /// 相机内参矩阵
     // Calibration
-    Eigen::Matrix3f mK_;
+    Eigen::Matrix3f mK_;    // 将相机内参整合后得到
 
     // Mutex
     std::mutex mMutexPose; // for pose, velocity and biases

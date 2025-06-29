@@ -2925,6 +2925,7 @@ bool Tracking::TrackWithMotionModel()
     else
         th=15;
 
+    // 搜索匹配点的数量，数量超过阈值则进行优化
     int nmatches = matcher.SearchByProjection(mCurrentFrame,mLastFrame,th,mSensor==System::MONOCULAR || mSensor==System::IMU_MONOCULAR);
 
     // If few matches, uses a wider window search
