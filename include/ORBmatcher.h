@@ -29,6 +29,14 @@
 #include"KeyFrame.h"
 #include"Frame.h"
 
+// SearchByProjection 投影匹配包括5种情况
+// 1. 当前帧和上一帧之间的匹配：用于帧间关联
+// 2. 当前帧和关键帧之间的匹配：用于帧与关键帧之间的关联
+// 3. 当前帧和投影地图点之间的匹配：用于局部地图的跟踪
+// 4. 帧与地图点之间的匹配，带相似变换：用于闭环检测
+// 5. 帧与地图点之间的匹配，带相似变换：位置重识别？带回环和地图合并的
+
+
 
 namespace ORB_SLAM3
 {
@@ -42,7 +50,7 @@ namespace ORB_SLAM3
         // Computes the Hamming distance between two ORB descriptors
         static int DescriptorDistance(const cv::Mat &a, const cv::Mat &b);
 
-        // 关键帧和投影地图点之间的匹配
+        // 关键帧和投影地图点之间的匹配 用于局部地图的跟踪
         // Search matches between Frame keypoints and projected MapPoints. Returns number of matches
         // Used to track the local map (Tracking)
         int SearchByProjection(Frame &F, const std::vector<MapPoint*> &vpMapPoints, const float th=3, const bool bFarPoints = false, const float thFarPoints = 50.0f);

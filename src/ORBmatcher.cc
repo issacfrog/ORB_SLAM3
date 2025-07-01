@@ -40,6 +40,7 @@ namespace ORB_SLAM3
     {
     }
 
+    /// 关键帧和投影地图点之间的匹配
     int ORBmatcher::SearchByProjection(Frame &F, const vector<MapPoint*> &vpMapPoints, const float th, const bool bFarPoints, const float thFarPoints)
     {
         int nmatches=0, left = 0, right = 0;
@@ -49,6 +50,7 @@ namespace ORB_SLAM3
         for(size_t iMP=0; iMP<vpMapPoints.size(); iMP++)
         {
             MapPoint* pMP = vpMapPoints[iMP];
+            // 剔除掉跟踪视野外点、过远点、坏点
             if(!pMP->mbTrackInView && !pMP->mbTrackInViewR)
                 continue;
 
@@ -58,8 +60,10 @@ namespace ORB_SLAM3
             if(pMP->isBad())
                 continue;
 
+            // 在当前帧的视野内
             if(pMP->mbTrackInView)
             {
+                // 决定在哪一层金字塔中搜索
                 const int &nPredictedLevel = pMP->mnTrackScaleLevel;
 
                 // The size of the window will depend on the viewing direction
@@ -96,6 +100,7 @@ namespace ORB_SLAM3
                                 continue;
                         }
 
+                        // 筛选出最近的两个特征点
                         const cv::Mat &d = F.mDescriptors.row(idx);
 
                         const int dist = DescriptorDistance(MPdescriptor,d);
@@ -122,12 +127,17 @@ namespace ORB_SLAM3
                     // Apply ratio to second match (only if best and second are in the same scale level)
                     if(bestDist<=TH_HIGH)
                     {
+                        // 当两个特征点在同一层，且两个特征距离很近的时候抛弃
+                        // 抛弃的原因是要去除掉重复纹理区域、模糊区域和特征描述子不具备强判别的情况
+                        // 这里可以理解为要筛选唯一性
                         if(bestLevel==bestLevel2 && bestDist>mfNNratio*bestDist2)
                             continue;
 
                         if(bestLevel!=bestLevel2 || bestDist<=mfNNratio*bestDist2){
+                            // 建立关联 mvpMapPoints 是MapPoint的指针数组
                             F.mvpMapPoints[bestIdx]=pMP;
 
+                            // 如果左右相机都存在，则建立左右相机之间的匹配关系
                             if(F.Nleft != -1 && F.mvLeftToRightMatch[bestIdx] != -1){ //Also match with the stereo observation at right camera
                                 F.mvpMapPoints[F.mvLeftToRightMatch[bestIdx] + F.Nleft] = pMP;
                                 nmatches++;
@@ -141,6 +151,7 @@ namespace ORB_SLAM3
                 }
             }
 
+            // 右相机匹配,处理方式与左目一致
             if(F.Nleft != -1 && pMP->mbTrackInViewR){
                 const int &nPredictedLevel = pMP->mnTrackScaleLevelR;
                 if(nPredictedLevel != -1){
@@ -212,6 +223,9 @@ namespace ORB_SLAM3
         return nmatches;
     }
 
+    /// 根据视角余弦值计算匹配半径 viewCos = vcam * vpoint / (vcam.norm() * vpoint.norm())
+    // 如果视角接近则表明匹配点距离相机很近，则匹配半径小
+    // 如果视角远离则表明匹配点距离相机很远，则匹配半径大
     float ORBmatcher::RadiusByViewingCos(const float &viewCos)
     {
         if(viewCos>0.998)
@@ -220,12 +234,24 @@ namespace ORB_SLAM3
             return 4.0;
     }
 
+    /// 用于tracking的匹配 Relocalization中使用
+    // 从关键帧中提取出地图点，然后与当前帧进行匹配核心逻辑与其他几个差不多差别在没有进行NNDR中的金字塔层级检测
+
+    // 模型给出原因：还是有道理的
+    // 在 ORBmatcher::SearchByBoW() 中，没有进行图像金字塔层级（scale level）的一致性检查，是因为：
+    // BoW 匹配的主要目标是快速粗匹配；
+    // 匹配点来源是同一个词汇节点，已经有一定相似性；
+    // 同时 SearchByBoW() 主要用于初始跟踪 / 回环匹配预筛选，不是最终确定的高精度匹配；
+    // 后续处理（如位姿优化、PnP RANSAC）会自动剔除误匹配；
+    // 对双目/鱼眼等图像，层级可能不严格对应，限制反而可能影响 recall。
     int ORBmatcher::SearchByBoW(KeyFrame* pKF,Frame &F, vector<MapPoint*> &vpMapPointMatches)
     {
+        // 关键帧的地图点
         const vector<MapPoint*> vpMapPointsKF = pKF->GetMapPointMatches();
 
         vpMapPointMatches = vector<MapPoint*>(F.N,static_cast<MapPoint*>(NULL));
 
+        // BoW 生成的倒排索引表
         const DBoW2::FeatureVector &vFeatVecKF = pKF->mFeatVec;
 
         int nmatches=0;
@@ -248,6 +274,8 @@ namespace ORB_SLAM3
                 const vector<unsigned int> vIndicesKF = KFit->second;
                 const vector<unsigned int> vIndicesF = Fit->second;
 
+                // 遍历关键帧的候选特征点
+                // 根据单目or双目筛选出距离最近的两对特征点
                 for(size_t iKF=0; iKF<vIndicesKF.size(); iKF++)
                 {
                     const unsigned int realIdxKF = vIndicesKF[iKF];
@@ -270,6 +298,7 @@ namespace ORB_SLAM3
                     int bestIdxFR =-1 ;
                     int bestDist2R=256;
 
+                    // 遍历当前帧的候选特征点
                     for(size_t iF=0; iF<vIndicesF.size(); iF++)
                     {
                         if(F.Nleft == -1){
@@ -354,6 +383,7 @@ namespace ORB_SLAM3
                             nmatches++;
                         }
 
+                        // NNDR检测 但是没有进行层级和ratio的检测，感觉有些奇怪
                         if(bestDist1R<=TH_LOW)
                         {
                             if(static_cast<float>(bestDist1R)<mfNNratio*static_cast<float>(bestDist2R) || true)
@@ -393,6 +423,8 @@ namespace ORB_SLAM3
             }
             else if(KFit->first < Fit->first)
             {
+                // 返回指向第一个​​不小于​​ value 的元素的迭代器 
+                // 这里是通过筛选掉已经匹配过的地图点
                 KFit = vFeatVecKF.lower_bound(Fit->first);
             }
             else
@@ -401,6 +433,7 @@ namespace ORB_SLAM3
             }
         }
 
+        // 方向一致性检查
         if(mbCheckOrientation)
         {
             int ind1=-1;
@@ -424,18 +457,22 @@ namespace ORB_SLAM3
         return nmatches;
     }
 
+    ///  用于回环的投影检测
+    // 处理orb算子的部分是一致的，核心筛选的逻辑一个是点到相机的距离，一个是视角夹角
     int ORBmatcher::SearchByProjection(KeyFrame* pKF, Sophus::Sim3f &Scw, const vector<MapPoint*> &vpPoints,
                                        vector<MapPoint*> &vpMatched, int th, float ratioHamming)
     {
+        /// 计算坐标
         // Get Calibration Parameters for later projection
         const float &fx = pKF->fx;
         const float &fy = pKF->fy;
         const float &cx = pKF->cx;
         const float &cy = pKF->cy;
-
+        // 世界坐标系下的相机坐标
         Sophus::SE3f Tcw = Sophus::SE3f(Scw.rotationMatrix(),Scw.translation()/Scw.scale());
         Eigen::Vector3f Ow = Tcw.inverse().translation();
 
+        // 筛选出已经匹配过的地图点不再处理
         // Set of MapPoints already found in the KeyFrame
         set<MapPoint*> spAlreadyFound(vpMatched.begin(), vpMatched.end());
         spAlreadyFound.erase(static_cast<MapPoint*>(NULL));
@@ -454,6 +491,7 @@ namespace ORB_SLAM3
             // Get 3D Coords.
             Eigen::Vector3f p3Dw = pMP->GetWorldPos();
 
+            // 转相机坐标
             // Transform into Camera Coords.
             Eigen::Vector3f p3Dc = Tcw * p3Dw;
 
@@ -468,9 +506,11 @@ namespace ORB_SLAM3
             if(!pKF->IsInImage(uv(0),uv(1)))
                 continue;
 
+            // 地图点的噪声，需要确认这个是哪里给的
             // Depth must be inside the scale invariance region of the point
             const float maxDistance = pMP->GetMaxDistanceInvariance();
             const float minDistance = pMP->GetMinDistanceInvariance();
+            // 点到相机的距离
             Eigen::Vector3f PO = p3Dw-Ow;
             const float dist = PO.norm();
 
@@ -480,6 +520,7 @@ namespace ORB_SLAM3
             // Viewing angle must be less than 60 deg
             Eigen::Vector3f Pn = pMP->GetNormal();
 
+            // 要求视角夹角小于60度
             if(PO.dot(Pn)<0.5*dist)
                 continue;
 
@@ -531,6 +572,8 @@ namespace ORB_SLAM3
         return nmatches;
     }
 
+    /// 用于回环的投影检测 与上一个函数主体逻辑一致
+    // 相比于前面的匹配算法额外加入了vpPointsKFs用于记录地图点对应的关键帧来源
     int ORBmatcher::SearchByProjection(KeyFrame* pKF, Sophus::Sim3<float> &Scw, const std::vector<MapPoint*> &vpPoints, const std::vector<KeyFrame*> &vpPointsKFs,
                                        std::vector<MapPoint*> &vpMatched, std::vector<KeyFrame*> &vpMatchedKF, int th, float ratioHamming)
     {
@@ -645,6 +688,21 @@ namespace ORB_SLAM3
         return nmatches;
     }
 
+    /// 用于初始化的匹配 在MonocularInitialization中使用
+    // 精确匹配：通过多重验证确保匹配质量
+    // 高效搜索：使用网格索引加速特征搜索
+    // 一致性检查：通过方向直方图过滤异常匹配
+    // 初始化专用：针对初始化阶段的特点进行优化
+    /**
+     * @brief 
+     * 问题，修正后的vbPrevMatched和vbPrevMatched匹配关系都会用到吗
+     * @param F1 两帧图像
+     * @param F2 
+     * @param vbPrevMatched 上一帧中特征点的预测位置
+     * @param vnMatches12 F1到F2的匹配关系 
+     * @param windowSize 搜索窗口大小
+     * @return int 
+     */
     int ORBmatcher::SearchForInitialization(Frame &F1, Frame &F2, vector<cv::Point2f> &vbPrevMatched, vector<int> &vnMatches12, int windowSize)
     {
         int nmatches=0;
@@ -662,6 +720,8 @@ namespace ORB_SLAM3
         {
             cv::KeyPoint kp1 = F1.mvKeysUn[i1];
             int level1 = kp1.octave;
+            // 只处理第0层的特征点，也即根据原始图像提取的特征点进行匹配
+            // 避免出现稳定性和一致性的问题
             if(level1>0)
                 continue;
 
@@ -703,6 +763,7 @@ namespace ORB_SLAM3
             {
                 if(bestDist<(float)bestDist2*mfNNratio)
                 {
+                    // 处理一对多的情况
                     if(vnMatches21[bestIdx2]>=0)
                     {
                         vnMatches12[vnMatches21[bestIdx2]]=-1;
@@ -754,6 +815,7 @@ namespace ORB_SLAM3
 
         }
 
+        // 更新匹配点
         //Update prev matched
         for(size_t i1=0, iend1=vnMatches12.size(); i1<iend1; i1++)
             if(vnMatches12[i1]>=0)
@@ -762,6 +824,7 @@ namespace ORB_SLAM3
         return nmatches;
     }
 
+    /// 用于回环的BoW匹配 DetectCommonRegionsFromBoW中使用 逻辑与前面的SearchByBoW一致
     int ORBmatcher::SearchByBoW(KeyFrame *pKF1, KeyFrame *pKF2, vector<MapPoint *> &vpMatches12)
     {
         const vector<cv::KeyPoint> &vKeysUn1 = pKF1->mvKeysUn;
@@ -904,12 +967,23 @@ namespace ORB_SLAM3
         return nmatches;
     }
 
+    /**
+     * @brief 用于三角化匹配 CreateNewMapPoints 中使用
+     * 
+     * @param pKF1 
+     * @param pKF2 
+     * @param vMatchedPairs 匹配成功的特征点对
+     * @param bOnlyStereo 是否只考虑双目
+     * @param bCoarse 是否使用粗匹配
+     * @return int 
+     */
     int ORBmatcher::SearchForTriangulation(KeyFrame *pKF1, KeyFrame *pKF2,
                                            vector<pair<size_t, size_t> > &vMatchedPairs, const bool bOnlyStereo, const bool bCoarse)
     {
         const DBoW2::FeatureVector &vFeatVec1 = pKF1->mFeatVec;
         const DBoW2::FeatureVector &vFeatVec2 = pKF2->mFeatVec;
 
+        // 预先是一些位姿的计算 并且根据是否是双目再做一些处理
         //Compute epipole in second image
         Sophus::SE3f T1w = pKF1->GetPose();
         Sophus::SE3f T2w = pKF2->GetPose();
@@ -917,7 +991,7 @@ namespace ORB_SLAM3
         Eigen::Vector3f Cw = pKF1->GetCameraCenter();
         Eigen::Vector3f C2 = T2w * Cw;
 
-        Eigen::Vector2f ep = pKF2->mpCamera->project(C2);
+        Eigen::Vector2f ep = pKF2->mpCamera->project(C2);   // 
         Sophus::SE3f T12;
         Sophus::SE3f Tll, Tlr, Trl, Trr;
         Eigen::Matrix3f R12; // for fastest computation
@@ -970,6 +1044,7 @@ namespace ORB_SLAM3
 
                     MapPoint* pMP1 = pKF1->GetMapPoint(idx1);
 
+                    // 如果已经匹配过则跳过
                     // If there is already a MapPoint skip
                     if(pMP1)
                     {
@@ -1023,10 +1098,15 @@ namespace ORB_SLAM3
                         const bool bRight2 = (pKF2 -> NLeft == -1 || idx2 < pKF2 -> NLeft) ? false
                                                                                            : true;
 
+                        // 单目极线约束
+                        // 如果特征点太靠近相机1的极点，那么可能导致解的不稳定，所以这里要剔除（注意为什么不稳定需要再仔细理解）
                         if(!bStereo1 && !bStereo2 && !pKF1->mpCamera2)
                         {
                             const float distex = ep(0)-kp2.pt.x;
                             const float distey = ep(1)-kp2.pt.y;
+                            // 动态根据金字塔层级（kp2.octave）设置距离阈值；
+                            // 比如金字塔第0层对应实际像素尺度较小，允许更近的点；
+                            // 层级越高，阈值越大 ➜ 匹配点更粗糙，要求更宽松。
                             if(distex*distex+distey*distey<100*pKF2->mvScaleFactors[kp2.octave])
                             {
                                 continue;
@@ -1069,6 +1149,9 @@ namespace ORB_SLAM3
 
                         }
 
+                        // 如果是粗匹配则直接成功
+                        // 否则进行对极约束验证，注前面是根据极点对特征点进行了一轮剔除
+                        // 这里是特征点之间的对极约束验证
                         if(bCoarse || pCamera1->epipolarConstrain(pCamera2,kp1,kp2,R12,t12,pKF1->mvLevelSigma2[kp1.octave],pKF2->mvLevelSigma2[kp2.octave])) // MODIFICATION_2
                         {
                             bestIdx2 = idx2;
@@ -1135,6 +1218,7 @@ namespace ORB_SLAM3
         vMatchedPairs.clear();
         vMatchedPairs.reserve(nmatches);
 
+        // 处理匹配成功的点对
         for(size_t i=0, iend=vMatches12.size(); i<iend; i++)
         {
             if(vMatches12[i]<0)
@@ -1674,6 +1758,7 @@ namespace ORB_SLAM3
     }
 
     /// 最近两帧的匹配
+    // 与关键帧匹配的差别是
     int ORBmatcher::SearchByProjection(Frame &CurrentFrame, const Frame &LastFrame, const float th, const bool bMono)
     {
         int nmatches = 0;
@@ -1756,11 +1841,19 @@ namespace ORB_SLAM3
                             if(CurrentFrame.mvpMapPoints[i2]->Observations()>0)
                                 continue;
 
-                        if(CurrentFrame. == -1 && CurrentFrame.mvuRight[i2]>0)
+                        // 对于双目系统，利用视差和投影距离进一步剔除错误点
+                        // 一个特征点在左右相机都有投影，那么深度是一致的
+                        // 此时理论上可以根据双目三角测量几何关系，对匹配结果进行进一的验证
+                        // 公式： ur = ul - b * f /z
+                        // 其中ur是右目特征点在右目图像上的横坐标，ul是左目特征点在左目图像上的横坐标，
+                        // b是双目相机的基线长度，f是相机的焦距，z是特征点在相机坐标系下的深度
+                        // 如果ur和当前特征点在右目图像上的横坐标差值大于搜索半径，则认为该匹配点是错误的
+                        // 这里CurrentFrame.Nleft == -1 表示单目系统，CurrentFrame.mvuRight[i2]>0 表示右目特征点存在
+                        if(CurrentFrame.Nleft == -1 && CurrentFrame.mvuRight[i2]>0)
                         {
                             const float ur = uv(0) - CurrentFrame.mbf*invzc;
                             const float er = fabs(ur - CurrentFrame.mvuRight[i2]);
-                            if(er>radius)Nleft
+                            if(er>radius)
                                 continue;
                         }
 
@@ -1775,20 +1868,26 @@ namespace ORB_SLAM3
                         }
                     }
 
+                    // 如果匹配距离小于阈值，则认为匹配成功
+                    // 进入下一步的处理
                     if(bestDist<=TH_HIGH)
                     {
                         CurrentFrame.mvpMapPoints[bestIdx2]=pMP;
                         nmatches++;
 
+                        // 如果检查方向
                         if(mbCheckOrientation)
                         {
+                            // 上一帧关键点
                             cv::KeyPoint kpLF = (LastFrame.Nleft == -1) ? LastFrame.mvKeysUn[i]
                                                                         : (i < LastFrame.Nleft) ? LastFrame.mvKeys[i]
                                                                                                 : LastFrame.mvKeysRight[i - LastFrame.Nleft];
-
+                            // 当前帧关键点
                             cv::KeyPoint kpCF = (CurrentFrame.Nleft == -1) ? CurrentFrame.mvKeysUn[bestIdx2]
                                                                            : (bestIdx2 < CurrentFrame.Nleft) ? CurrentFrame.mvKeys[bestIdx2]
-                                                                                                             : CurrentFrame.mvKeysRight[bestIdx2 - CurrentFrame.Nleft];
+                                                                                                        : CurrentFrame.mvKeysRight[bestIdx2 - CurrentFrame.Nleft];
+                            
+                            // 每个 cv::KeyPoint 包含了一个方向角 angle（范围 0°~360°），代表局部图像主方向，用于旋转不变性
                             float rot = kpLF.angle-kpCF.angle;
                             if(rot<0.0)
                                 rot+=360.0f;
@@ -1799,7 +1898,12 @@ namespace ORB_SLAM3
                             rotHist[bin].push_back(bestIdx2);
                         }
                     }
+                    // 对于双目或者鱼眼相机的处理
+                    // 如果某个地图点在左目图像上被检测到，进一步将其匹配到右目图像上
+                    // 这样可以增强三角化的观测数量和质量
                     if(CurrentFrame.Nleft != -1){
+                        // 将相机平面上的3D点投影到右目图像平面
+                        // 公式： Pcam_right = T_right_left * Pcam_left
                         Eigen::Vector3f x3Dr = CurrentFrame.GetRelativePoseTrl() * x3Dc;
                         Eigen::Vector2f uv = CurrentFrame.mpCamera->project(x3Dr);
 
@@ -1894,7 +1998,7 @@ namespace ORB_SLAM3
         return nmatches;
     }
 
-    // 当前帧与关键帧之间的投影匹配
+    /// 当前帧与关键帧之间的投影匹配
     int ORBmatcher::SearchByProjection(Frame &CurrentFrame, KeyFrame *pKF, const set<MapPoint*> &sAlreadyFound, const float th , const int ORBdist)
     {
         int nmatches = 0;
@@ -1992,11 +2096,6 @@ namespace ORB_SLAM3
                     // 如果匹配距离小于阈值，则认为匹配成功
                     if(bestDist<=ORBdist)
                     {
-                        CurrentFrame.mvpMapPoints[bestIdx2]=pMP;
-                        nmatches++;
-
-                        // 如果需要检查旋转方向的一直醒，则将角度差放到rotHist中等待下一步操作
-                        if(mbCheckOrientation)
                         {
                             float rot = pKF->mvKeysUn[i].angle-CurrentFrame.mvKeysUn[bestIdx2].angle;
                             if(rot<0.0)
@@ -2040,7 +2139,7 @@ namespace ORB_SLAM3
         return nmatches;
     }
 
-    // 
+    /// 计算直方图中的三个最大值
     void ORBmatcher::ComputeThreeMaxima(vector<int>* histo, const int L, int &ind1, int &ind2, int &ind3)
     {
         int max1=0;
@@ -2084,9 +2183,9 @@ namespace ORB_SLAM3
         }
     }
 
-
-// Bit set count operation from
-// http://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetParallel
+    /// ORB描述子计算
+    /// Bit set count operation from ORB
+    // http://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetParallel
     int ORBmatcher::DescriptorDistance(const cv::Mat &a, const cv::Mat &b)
     {
         const int *pa = a.ptr<int32_t>();
