@@ -977,6 +977,8 @@ namespace ORB_SLAM3
      * @param bCoarse 是否使用粗匹配
      * @return int 
      */
+    
+    /// 核心trick 一是对于投影点附近的特征点进行剔除，二是对于特征点之间的对极约束验证
     int ORBmatcher::SearchForTriangulation(KeyFrame *pKF1, KeyFrame *pKF2,
                                            vector<pair<size_t, size_t> > &vMatchedPairs, const bool bOnlyStereo, const bool bCoarse)
     {
@@ -1229,6 +1231,7 @@ namespace ORB_SLAM3
         return nmatches;
     }
 
+    /// LoopMapping中使用
     int ORBmatcher::Fuse(KeyFrame *pKF, const vector<MapPoint *> &vpMapPoints, const float th, const bool bRight)
     {
         GeometricCamera* pCamera;
@@ -1256,6 +1259,8 @@ namespace ORB_SLAM3
 
         const int nMPs = vpMapPoints.size();
 
+        /// 遍历地图点
+        // 检测剔除点包括坏点、已经匹配点、深度异常点、投影不在图像内的点
         // For debbuging
         int count_notMP = 0, count_bad=0, count_isinKF = 0, count_negdepth = 0, count_notinim = 0, count_dist = 0, count_normal=0, count_notidx = 0, count_thcheck = 0;
         for(int i=0; i<nMPs; i++)
@@ -1335,6 +1340,7 @@ namespace ORB_SLAM3
                 continue;
             }
 
+            // 在关键帧图像中搜索最相似的特征点，以特征点到投影点的距离作为粗筛选
             // Match to the most similar keypoint in the radius
 
             const cv::Mat dMP = pMP->GetDescriptor();
@@ -1353,6 +1359,7 @@ namespace ORB_SLAM3
                 if(kpLevel<nPredictedLevel-1 || kpLevel>nPredictedLevel)
                     continue;
 
+                // 根据是否双目来计算距离
                 if(pKF->mvuRight[idx]>=0)
                 {
                     // Check reprojection error in stereo
@@ -1392,6 +1399,7 @@ namespace ORB_SLAM3
                 }
             }
 
+            // 如果检查到了更好的匹配点则进行替换
             // If there is already a MapPoint replace otherwise add new measurement
             if(bestDist<=TH_LOW)
             {
@@ -1421,6 +1429,7 @@ namespace ORB_SLAM3
         return nFused;
     }
 
+    /// LoopClosing中使用
     int ORBmatcher::Fuse(KeyFrame *pKF, Sophus::Sim3f &Scw, const vector<MapPoint *> &vpPoints, float th, vector<MapPoint *> &vpReplacePoint)
     {
         // Get Calibration Parameters for later projection
