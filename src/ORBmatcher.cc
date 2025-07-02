@@ -1232,6 +1232,17 @@ namespace ORB_SLAM3
     }
 
     /// LoopMapping中使用
+    /**
+     * @brief 
+     * 1.获取相机参数和地图点数
+     * 2.遍历地图点，同时删除坏点、已经匹配点、深度异常点、投影不在图像内的点
+     * 
+     * @param pKF 
+     * @param vpMapPoints 
+     * @param th 
+     * @param bRight 
+     * @return int 
+     */
     int ORBmatcher::Fuse(KeyFrame *pKF, const vector<MapPoint *> &vpMapPoints, const float th, const bool bRight)
     {
         GeometricCamera* pCamera;
@@ -1360,6 +1371,12 @@ namespace ORB_SLAM3
                     continue;
 
                 // 根据是否双目来计算距离
+                // 标准双目相机系统左右相机经过了立体校正（注意这个是假设的前提）
+                // 1.左右相机光轴平行
+                // 2.基线水平放置
+                // 3.图像共平面
+                // 重要性质是同一个3D点在左右图像上进行投影的时候在y轴上的坐标进本一致
+                // 个人感觉这个约束并没有与几何关系完全对应上
                 if(pKF->mvuRight[idx]>=0)
                 {
                     // Check reprojection error in stereo
@@ -1429,7 +1446,8 @@ namespace ORB_SLAM3
         return nFused;
     }
 
-    /// LoopClosing中使用
+    /// LoopClosing中使用 
+    // 重点差别是上一个Fuse中会有replace操作，而这里不涉及，直接进行add操作
     int ORBmatcher::Fuse(KeyFrame *pKF, Sophus::Sim3f &Scw, const vector<MapPoint *> &vpPoints, float th, vector<MapPoint *> &vpReplacePoint)
     {
         // Get Calibration Parameters for later projection
@@ -1547,6 +1565,19 @@ namespace ORB_SLAM3
         return nFused;
     }
 
+    /**
+     * @brief 实际目前还没有使用
+     * 1.从F1向F2投影检测匹配情况
+     * 2.从F2向F1投影检测匹配情况
+     * 3.检查匹配点是否一致
+     * 
+     * @param pKF1 
+     * @param pKF2 
+     * @param vpMatches12 
+     * @param S12 
+     * @param th 
+     * @return int 
+     */
     int ORBmatcher::SearchBySim3(KeyFrame* pKF1, KeyFrame* pKF2, std::vector<MapPoint *> &vpMatches12, const Sophus::Sim3f &S12, const float th)
     {
         const float &fx = pKF1->fx;
@@ -1665,7 +1696,7 @@ namespace ORB_SLAM3
             }
         }
 
-        // Transform from KF2 to KF2 and search
+        // Transform from KF2 to KF1 and search
         for(int i2=0; i2<N2; i2++)
         {
             MapPoint* pMP = vpMapPoints2[i2];
