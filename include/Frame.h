@@ -176,74 +176,73 @@ public:
 
 private:
     //Sophus/Eigen migration
-    Sophus::SE3<float> mTcw;
-    Eigen::Matrix<float,3,3> mRwc;
-    Eigen::Matrix<float,3,1> mOw;
-    Eigen::Matrix<float,3,3> mRcw;
-    Eigen::Matrix<float,3,1> mtcw;
-    bool mbHasPose;
+    Sophus::SE3<float> mTcw;           // 世界坐标系到相机坐标系的变换矩阵
+    Eigen::Matrix<float,3,3> mRwc;     // 相机坐标到世界坐标
+    Eigen::Matrix<float,3,1> mOw;      // 相机中心在世界坐标系中的位置
+    Eigen::Matrix<float,3,3> mRcw;     // 世界坐标系到相机的旋转矩阵
+    Eigen::Matrix<float,3,1> mtcw;     // 世界坐标系到相机的平移向量
+    bool mbHasPose;                    // 是否有有效位姿
 
     //Rcw_ not necessary as Sophus has a method for extracting the rotation matrix: Tcw_.rotationMatrix()
     //tcw_ not necessary as Sophus has a method for extracting the translation vector: Tcw_.translation()
     //Twc_ not necessary as Sophus has a method for easily computing the inverse pose: Tcw_.inverse()
 
-    Sophus::SE3<float> mTlr, mTrl;
-    Eigen::Matrix<float,3,3> mRlr;
-    Eigen::Vector3f mtlr;
-
+    Sophus::SE3<float> mTlr, mTrl;     // 左右相机之间的变换矩阵
+    Eigen::Matrix<float,3,3> mRlr;     // 左右相机之间的旋转矩阵
+    Eigen::Vector3f mtlr;              // 左右相机之间的平移向量
 
     // IMU linear velocity
-    Eigen::Vector3f mVw;
-    bool mbHasVelocity;
+    Eigen::Vector3f mVw;              // 世界坐标系下的IMU线速度
+    bool mbHasVelocity;               // 是否有有效速度
 
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
     // Vocabulary used for relocalization.
-    ORBVocabulary* mpORBvocabulary;
+    ORBVocabulary* mpORBvocabulary;   // 词汇表
 
     // Feature extractor. The right is used only in the stereo case.
-    ORBextractor* mpORBextractorLeft, *mpORBextractorRight;
+    ORBextractor* mpORBextractorLeft, *mpORBextractorRight; // 特征提取器，双目时使用
 
     // Frame timestamp.
     double mTimeStamp;
 
     // Calibration matrix and OpenCV distortion parameters.
-    cv::Mat mK;
-    Eigen::Matrix3f mK_;
-    static float fx;
-    static float fy;
-    static float cx;
-    static float cy;
-    static float invfx;
-    static float invfy;
-    cv::Mat mDistCoef;
+    cv::Mat mK;              // opencv格式内参矩阵
+    Eigen::Matrix3f mK_;     // 内参矩阵
+    static float fx;         // 焦距x
+    static float fy;         // 焦距y
+    static float cx;         // 主点x
+    static float cy;         // 主点y
+    static float invfx;      // 焦距x的倒数
+    static float invfy;      // 焦距y的倒数
+    cv::Mat mDistCoef;       // 畸变系数
 
     // Stereo baseline multiplied by fx.
-    float mbf;
+    float mbf;               // 基线长度乘以焦距
 
     // Stereo baseline in meters.
-    float mb;
+    float mb;                // 基线长度
 
     // Threshold close/far points. Close points are inserted from 1 view.
     // Far points are inserted as in the monocular case from 2 views.
-    float mThDepth;
+    float mThDepth;          // 深度阈值
 
     // Number of KeyPoints.
     // 特征点的数量
-    int N;
+    int N;                  // 特征点的数量
 
     // Vector of keypoints (original for visualization) and undistorted (actually used by the system).
-    // In the stereo case, mvKeysUn is redundant as images must be rectified.
+    // In the stereo case, mvKeysUn is redundant as images must be rectified. 在双目中图像必须经过矫正，此时去畸变结果是冗余的
     // In the RGB-D case, RGB images can be distorted.
-    std::vector<cv::KeyPoint> mvKeys, mvKeysRight;
-    std::vector<cv::KeyPoint> mvKeysUn;
+    std::vector<cv::KeyPoint> mvKeys, mvKeysRight; // 原始图像中的特征点 和 右图的图像点
+    std::vector<cv::KeyPoint> mvKeysUn;            // 去畸变后的特征点
 
     // Corresponding stereo coordinate and depth for each keypoint.
-    std::vector<MapPoint*> mvpMapPoints;
+    std::vector<MapPoint*> mvpMapPoints; // MapPoint地图点，通过idx与特征点关联
     // "Monocular" keypoints have a negative value.
-    std::vector<float> mvuRight;
-    std::vector<float> mvDepth;
+    std::vector<float> mvuRight;         // 右图的图像点的x坐标
+    std::vector<float> mvDepth;          // 特征点对应的深度
 
     // Bag of Words Vector structures.
     DBoW2::BowVector mBowVec;
@@ -254,9 +253,10 @@ public:
 
     // MapPoints associated to keypoints, NULL pointer if no association.
     // Flag to identify outlier associations.
-    std::vector<bool> mvbOutlier;
-    int mnCloseMPs;
+    std::vector<bool> mvbOutlier;   // 外点标记
+    int mnCloseMPs;                 // 临近距离地图点的数量 实际没有用到
 
+    // 网格宽度倒数
     // Keypoints are assigned to cells in a grid to reduce matching complexity when projecting MapPoints.
     static float mfGridElementWidthInv;
     static float mfGridElementHeightInv;
@@ -266,13 +266,13 @@ public:
     // 这里典型的FRAME_GRID_COLS 和 FRAME_GRID_ROWS 分别定义为了64和48
     std::vector<std::size_t> mGrid[FRAME_GRID_COLS][FRAME_GRID_ROWS];
 
-    IMU::Bias mPredBias;
+    IMU::Bias mPredBias;    // 预测的IMU偏置
 
     // IMU bias
-    IMU::Bias mImuBias;
+    IMU::Bias mImuBias;      // 当前帧的IMU偏置
 
     // Imu calibration
-    IMU::Calib mImuCalib;
+    IMU::Calib mImuCalib;    // IMU的校准参数
 
     // Imu preintegration from last keyframe
     IMU::Preintegrated* mpImuPreintegrated;
@@ -290,6 +290,7 @@ public:
     KeyFrame* mpReferenceKF;
 
     // Scale pyramid info.
+    // 图像金字塔用的一些数据
     int mnScaleLevels;
     float mfScaleFactor;
     float mfLogScaleFactor;
@@ -304,14 +305,15 @@ public:
     static float mnMinY;
     static float mnMaxY;
 
-    static bool mbInitialComputations;
+    static bool mbInitialComputations; // 初始化标志
 
-    map<long unsigned int, cv::Point2f> mmProjectPoints;
-    map<long unsigned int, cv::Point2f> mmMatchedInImage;
+    // mm前缀是member+map的缩写
+    map<long unsigned int, cv::Point2f> mmProjectPoints;  // 特征点在图像上的投影点
+    map<long unsigned int, cv::Point2f> mmMatchedInImage; // 特征点在图像上的匹配点
 
     string mNameFile;
 
-    int mnDataset;
+    int mnDataset;  // 似乎没太用的到
 
 #ifdef REGISTER_TIMES
     double mTimeORB_Ext;
@@ -331,29 +333,29 @@ private:
     // Assign keypoints to the grid for speed up feature matching (called in the constructor).
     void AssignFeaturesToGrid();
 
-    bool mbIsSet;
+    bool mbIsSet;           // 是否标定标志
 
-    bool mbImuPreintegrated;
+    bool mbImuPreintegrated; // IMU预积分标志
 
-    std::mutex *mpMutexImu;
+    std::mutex *mpMutexImu; // IMU互斥锁
 
 public:
-    GeometricCamera* mpCamera, *mpCamera2;
+    GeometricCamera* mpCamera, *mpCamera2;  // 相机
 
     //Number of KeyPoints extracted in the left and right images
-    int Nleft, Nright;
+    int Nleft, Nright;  // 左右相机提取的特征点数量
     //Number of Non Lapping Keypoints
-    int monoLeft, monoRight;
+    int monoLeft, monoRight; // 双目中无法匹配到的特征点的数量
 
     //For stereo matching
-    std::vector<int> mvLeftToRightMatch, mvRightToLeftMatch;
+    std::vector<int> mvLeftToRightMatch, mvRightToLeftMatch; // 左右相机匹配到的特征点索引 
 
     //For stereo fisheye matching
-    static cv::BFMatcher BFmatcher;
+    static cv::BFMatcher BFmatcher; // 特征匹配器鱼眼相机用的
 
     //Triangulated stereo observations using as reference the left camera. These are
     //computed during ComputeStereoFishEyeMatches
-    std::vector<Eigen::Vector3f> mvStereo3Dpoints;
+    std::vector<Eigen::Vector3f> mvStereo3Dpoints; // 三角化特征3D点 计算点云用的？
 
     //Grid for the right image
     std::vector<std::size_t> mGridRight[FRAME_GRID_COLS][FRAME_GRID_ROWS];
@@ -367,7 +369,7 @@ public:
 
     Eigen::Vector3f UnprojectStereoFishEye(const int &i);
 
-    cv::Mat imgLeft, imgRight;
+    cv::Mat imgLeft, imgRight; // 左右相机图像
 
     void PrintPointDistribution(){
         int left = 0, right = 0;
