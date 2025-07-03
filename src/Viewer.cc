@@ -22,6 +22,7 @@
 
 #include <mutex>
 
+// Pangolin可视化
 namespace ORB_SLAM3
 {
 

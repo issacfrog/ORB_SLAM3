@@ -23,6 +23,11 @@
 #include "Pinhole.h"
 #include "KannalaBrandt8.h"
 
+
+/**
+ * @brief Atlas地图，本身Atlas有地图集的意思，这里还挺浪漫
+ * 
+ */
 namespace ORB_SLAM3
 {
 
@@ -55,15 +60,22 @@ Atlas::~Atlas()
     }
 }
 
+/// 创建新地图
+/**
+ * 1.如果没有地图则进行创建
+ * 2.如果是第二帧地图，涉及地图的存储与激活等工作
+ */
 void Atlas::CreateNewMap()
 {
     unique_lock<mutex> lock(mMutexAtlas);
-    cout << "Creation of new map with id: " << Map::nNextId << endl;
+    cout << "Creation of new map with id: " << Map::nNextId << endl;    // 静态变量自动递增分配的唯一id
+    // 已经存在地图的情况下
     if(mpCurrentMap){
+        // 用于筛选出第二张地图
         if(!mspMaps.empty() && mnLastInitKFidMap < mpCurrentMap->GetMaxKFid())
             mnLastInitKFidMap = mpCurrentMap->GetMaxKFid()+1; //The init KF is the next of current maximum
 
-        mpCurrentMap->SetStoredMap();
+        mpCurrentMap->SetStoredMap();   // 将当前地图状态设置为存储的地图
         cout << "Stored map with ID: " << mpCurrentMap->GetId() << endl;
 
         //if(mHasViewer)
@@ -71,11 +83,17 @@ void Atlas::CreateNewMap()
     }
     cout << "Creation of new map with last KF id: " << mnLastInitKFidMap << endl;
 
+    // 新建地图并且进行激活
     mpCurrentMap = new Map(mnLastInitKFidMap);
     mpCurrentMap->SetCurrentMap();
     mspMaps.insert(mpCurrentMap);
 }
 
+/**
+ * @brief 切换地图
+ * 
+ * @param pMap 
+ */
 void Atlas::ChangeMap(Map* pMap)
 {
     unique_lock<mutex> lock(mMutexAtlas);
@@ -299,8 +317,13 @@ bool Atlas::isImuInitialized()
     return mpCurrentMap->isImuInitialized();
 }
 
+/**
+ * @brief 系统状态保存前的数据预处理
+ * 
+ */
 void Atlas::PreSave()
 {
+    // 首帧校验
     if(mpCurrentMap){
         if(!mspMaps.empty() && mnLastInitKFidMap < mpCurrentMap->GetMaxKFid())
             mnLastInitKFidMap = mpCurrentMap->GetMaxKFid()+1; //The init KF is the next of current maximum
@@ -313,8 +336,9 @@ void Atlas::PreSave()
             return elem1->GetId() < elem2->GetId();
         }
     };
+    // 将当前地图集复制到备份地图集
     std::copy(mspMaps.begin(), mspMaps.end(), std::back_inserter(mvpBackupMaps));
-    sort(mvpBackupMaps.begin(), mvpBackupMaps.end(), compFunctor());
+    sort(mvpBackupMaps.begin(), mvpBackupMaps.end(), compFunctor());    // 地图排序
 
     std::set<GeometricCamera*> spCams(mvpCameras.begin(), mvpCameras.end());
     for(Map* pMi : mvpBackupMaps)
@@ -327,7 +351,7 @@ void Atlas::PreSave()
             SetMapBad(pMi);
             continue;
         }
-        pMi->PreSave(spCams);
+        pMi->PreSave(spCams);   
     }
     RemoveBadMaps();
 }
