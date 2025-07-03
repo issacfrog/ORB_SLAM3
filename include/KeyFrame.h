@@ -324,31 +324,34 @@ public:
     const float mfGridElementHeightInv;
 
     // Variables used by the tracking
-    long unsigned int mnTrackReferenceForFrame;
-    long unsigned int mnFuseTargetForKF;
+    long unsigned int mnTrackReferenceForFrame; // 跟踪参考帧id
+    long unsigned int mnFuseTargetForKF;        // 融合目标帧id 看名称应该是想目标上面去靠拢
 
     // Variables used by the local mapping
-    long unsigned int mnBALocalForKF;
-    long unsigned int mnBAFixedForKF;
+    long unsigned int mnBALocalForKF;           // 局部BA关键帧id       
+    long unsigned int mnBAFixedForKF;           // 固定BA关键帧id
 
     //Number of optimizations by BA(amount of iterations in BA)
-    long unsigned int mnNumberOfOpt;
+    long unsigned int mnNumberOfOpt;            // BA优化次数
 
+    // 回环检测的变量
+    // 这里区分了多种类型的查询id
+    // 基本思路应该是不同类型任务的精度要求不一样，由此进行了id的区分
     // Variables used by the keyframe database
-    long unsigned int mnLoopQuery;
-    int mnLoopWords;
-    float mLoopScore;
-    long unsigned int mnRelocQuery;
-    int mnRelocWords;
-    float mRelocScore;
-    long unsigned int mnMergeQuery;
-    int mnMergeWords;
-    float mMergeScore;
-    long unsigned int mnPlaceRecognitionQuery;
-    int mnPlaceRecognitionWords;
-    float mPlaceRecognitionScore;
+    long unsigned int mnLoopQuery;               // 回环查询id
+    int mnLoopWords;                             // 回环查询词袋
+    float mLoopScore;                            // 回环得分
+    long unsigned int mnRelocQuery;              // 重定位查询id
+    int mnRelocWords;                            // 重定位查询词袋
+    float mRelocScore;                           // 重定位得分
+    long unsigned int mnMergeQuery;              // 融合查询id
+    int mnMergeWords;                            // 融合查询词袋
+    float mMergeScore;                           // 融合得分
+    long unsigned int mnPlaceRecognitionQuery;   // 地点识别查询id
+    int mnPlaceRecognitionWords;                 // 地点识别查询词袋
+    float mPlaceRecognitionScore;                // 地点识别得分
 
-    bool mbCurrentPlaceRecognition;
+    bool mbCurrentPlaceRecognition;              // 是否当前地点识别
 
 
     /// 闭环检测变量
@@ -361,6 +364,8 @@ public:
     IMU::Bias mBiasGBA;
     long unsigned int mnBAGlobalForKF;  // 闭环检测对应的关键帧id
 
+    // 注意！！！merge是ORBSLAM3中的一个关键概念
+    // 关键帧合并前后的位姿等
     // Variables used by merging
     Sophus::SE3f mTcwMerge;
     Sophus::SE3f mTcwBefMerge;
@@ -368,10 +373,10 @@ public:
     Eigen::Vector3f mVwbMerge;
     Eigen::Vector3f mVwbBefMerge;
     IMU::Bias mBiasMerge;
-    long unsigned int mnMergeCorrectedForKF;
-    long unsigned int mnMergeForKF;
-    float mfScaleMerge;
-    long unsigned int mnBALocalForMerge;
+    long unsigned int mnMergeCorrectedForKF;    // 关键帧合并后修正
+    long unsigned int mnMergeForKF;             // 关键帧合并前
+    float mfScaleMerge;                         // 关键帧合并后尺度
+    long unsigned int mnBALocalForMerge;        // 合并局部关键帧id
 
     float mfScale;
 
@@ -425,12 +430,13 @@ public:
     IMU::Preintegrated* mpImuPreintegrated;
     IMU::Calib mImuCalib;
 
-    unsigned int mnOriginMapId;
+    unsigned int mnOriginMapId; // 原始地图id似乎没有什么实际作用
 
     string mNameFile;
 
     int mnDataset;
 
+    // 候选关键帧，似乎代码里也没有用到
     std::vector <KeyFrame*> mvpLoopCandKFs;
     std::vector <KeyFrame*> mvpMergeCandKFs;
 
@@ -459,9 +465,9 @@ protected:
     IMU::Bias mImuBias;
 
     // MapPoints associated to keypoints
-    std::vector<MapPoint*> mvpMapPoints;
+    std::vector<MapPoint*> mvpMapPoints;            // 关键帧关联的MapPoints
     // For save relation without pointer, this is necessary for save/load function
-    std::vector<long long int> mvBackupMapPointsId;
+    std::vector<long long int> mvBackupMapPointsId; // 被选地图点id，具体作用不知道
 
     // BoW
     KeyFrameDatabase* mpKeyFrameDB;
@@ -470,12 +476,15 @@ protected:
     // Grid over the image to speed up feature matching
     std::vector< std::vector <std::vector<size_t> > > mGrid;
 
+    // 共视图
+    // 注意共视图是ORBSLAM3中的关键概念，具体使用需要好好看看
     std::map<KeyFrame*,int> mConnectedKeyFrameWeights;
     std::vector<KeyFrame*> mvpOrderedConnectedKeyFrames;
     std::vector<int> mvOrderedWeights;
     // For save relation without pointer, this is necessary for save/load function
     std::map<long unsigned int, int> mBackupConnectedKeyFrameIdWeights;
 
+    // 包含树结构与回环边等
     // Spanning Tree and Loop Edges
     bool mbFirstConnection;
     KeyFrame* mpParent;
@@ -516,18 +525,18 @@ protected:
     std::mutex mMutexMap;
 
 public:
-    GeometricCamera* mpCamera, *mpCamera2;
+    GeometricCamera* mpCamera, *mpCamera2;  // 相机
 
     //Indexes of stereo observations correspondences
-    std::vector<int> mvLeftToRightMatch, mvRightToLeftMatch;
+    std::vector<int> mvLeftToRightMatch, mvRightToLeftMatch; // 左右相机特征点匹配索引
 
     Sophus::SE3f GetRelativePoseTrl();
     Sophus::SE3f GetRelativePoseTlr();
 
     //KeyPoints in the right image (for stereo fisheye, coordinates are needed)
-    const std::vector<cv::KeyPoint> mvKeysRight;
+    const std::vector<cv::KeyPoint> mvKeysRight; // 右相机特征点
 
-    const int NLeft, NRight;
+    const int NLeft, NRight;    // 左右相机特征点数量
 
     std::vector< std::vector <std::vector<size_t> > > mGridRight;
 
