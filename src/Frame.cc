@@ -381,7 +381,8 @@ Frame::Frame(const cv::Mat &imGray, const double &timeStamp, ORBextractor* extra
     mpMutexImu = new std::mutex();
 }
 
-
+// 将特征点分配到预先分配的网格中
+// 这里主要的是分配的策略，给每个网格分配0.5*N/nCells个特征点，一般每个网格可能涉及到一次二次分配
 void Frame::AssignFeaturesToGrid()
 {
     // Fill matrix with points
@@ -397,8 +398,7 @@ void Frame::AssignFeaturesToGrid()
             }
         }
 
-
-
+    // 遍历所有特征点，将特征点分配到对应的网格中
     for(int i=0;i<N;i++)
     {
         const cv::KeyPoint &kp = (Nleft == -1) ? mvKeysUn[i]
@@ -415,6 +415,7 @@ void Frame::AssignFeaturesToGrid()
     }
 }
 
+// 执行特征提取操作
 void Frame::ExtractORB(int flag, const cv::Mat &im, const int x0, const int x1)
 {
     vector<int> vLapping = {x0,x1};
@@ -509,6 +510,14 @@ Eigen::Vector3f Frame::GetRelativePoseTlr_translation() {
 }
 
 
+/**
+ * @brief 用于视锥剔除
+ * 
+ * @param pMP 
+ * @param viewingCosLimit 
+ * @return true 
+ * @return false 
+ */
 bool Frame::isInFrustum(MapPoint *pMP, float viewingCosLimit)
 {
     if(Nleft == -1){
@@ -520,7 +529,7 @@ bool Frame::isInFrustum(MapPoint *pMP, float viewingCosLimit)
         Eigen::Matrix<float,3,1> P = pMP->GetWorldPos();
 
         // 3D in camera coordinates
-        const Eigen::Matrix<float,3,1> Pc = mRcw * P + mtcw;
+        const Eigen::Matrix<float,3,1> Pc = mRcw * P + mtcw;    // 相机坐标系下的点
         const float Pc_dist = Pc.norm();
 
         // Check positive depth
@@ -553,6 +562,7 @@ bool Frame::isInFrustum(MapPoint *pMP, float viewingCosLimit)
 
         const float viewCos = PO.dot(Pn)/dist;
 
+        // 如果小于视锥阈值则剔除
         if(viewCos<viewingCosLimit)
             return false;
 
@@ -585,6 +595,16 @@ bool Frame::isInFrustum(MapPoint *pMP, float viewingCosLimit)
     }
 }
 
+/**
+ * @brief 投影点去畸变
+ * 
+ * @param pMP 
+ * @param kp 
+ * @param u 
+ * @param v 
+ * @return true 
+ * @return false 
+ */
 bool Frame::ProjectPointDistort(MapPoint* pMP, cv::Point2f &kp, float &u, float &v)
 {
 
@@ -753,7 +773,7 @@ bool Frame::PosInGrid(const cv::KeyPoint &kp, int &posX, int &posY)
     return true;
 }
 
-
+// 词袋处理逻辑暂时不管
 void Frame::ComputeBoW()
 {
     if(mBowVec.empty())
@@ -827,21 +847,34 @@ void Frame::ComputeImageBounds(const cv::Mat &imLeft)
     }
 }
 
+/**
+ * @brief 双目立体匹配计算函数
+ * 核心功能是为左图的每个特征点在右图中找到匹配点
+ * 1.粗筛选出像素级别的特征点
+ * 2.精匹配获取亚像素级别
+ */
 void Frame::ComputeStereoMatches()
 {
     mvuRight = vector<float>(N,-1.0f);
     mvDepth = vector<float>(N,-1.0f);
 
+    // high表示比较宽松的匹配阈值
+    // low表示比较严格的匹配阈值
+    // 这里取平均值作为阈值 感觉是一个经验的效果
     const int thOrbDist = (ORBmatcher::TH_HIGH+ORBmatcher::TH_LOW)/2;
 
+    // 第0层金字塔的行数
     const int nRows = mpORBextractorLeft->mvImagePyramid[0].rows;
 
+    // 关键点的索引表
     //Assign keypoints to row table
     vector<vector<size_t> > vRowIndices(nRows,vector<size_t>());
 
+    // 每行预分配200个特征点
     for(int i=0; i<nRows; i++)
         vRowIndices[i].reserve(200);
 
+    // 右目特征点的数量
     const int Nr = mvKeysRight.size();
 
     for(int iR=0; iR<Nr; iR++)
@@ -857,10 +890,11 @@ void Frame::ComputeStereoMatches()
     }
 
     // Set limits for search
-    const float minZ = mb;
-    const float minD = 0;
-    const float maxD = mbf/minZ;
+    const float minZ = mb;          // 最小深度 = 基线长度（感觉是个个人设置喜好）
+    const float minD = 0;           // 最小视差
+    const float maxD = mbf/minZ;    // 最大视差
 
+    // 对于左目的特征，去右目中搜索匹配点
     // For each left keypoint search a match in the right image
     vector<pair<int, int> > vDistIdx;
     vDistIdx.reserve(N);
@@ -877,6 +911,7 @@ void Frame::ComputeStereoMatches()
         if(vCandidates.empty())
             continue;
 
+        // 搜索范围
         const float minU = uL-maxD;
         const float maxU = uL-minD;
 
@@ -888,6 +923,7 @@ void Frame::ComputeStereoMatches()
 
         const cv::Mat &dL = mDescriptors.row(iL);
 
+        // 遍历右目候选特征点
         // Compare descriptor to right keypoints
         for(size_t iC=0; iC<vCandidates.size(); iC++)
         {
@@ -912,6 +948,7 @@ void Frame::ComputeStereoMatches()
             }
         }
 
+        // 亚像素匹配 这里是提升精度的关键了
         // Subpixel match by correlation
         if(bestDist<thOrbDist)
         {
@@ -922,6 +959,7 @@ void Frame::ComputeStereoMatches()
             const float scaledvL = round(kpL.pt.y*scaleFactor);
             const float scaleduR0 = round(uR0*scaleFactor);
 
+            // 取一个窗口
             // sliding window search
             const int w = 5;
             cv::Mat IL = mpORBextractorLeft->mvImagePyramid[kpL.octave].rowRange(scaledvL-w,scaledvL+w+1).colRange(scaleduL-w,scaleduL+w+1);
@@ -939,9 +977,10 @@ void Frame::ComputeStereoMatches()
 
             for(int incR=-L; incR<=+L; incR++)
             {
+                // 水平方向上进行滑窗
                 cv::Mat IR = mpORBextractorRight->mvImagePyramid[kpL.octave].rowRange(scaledvL-w,scaledvL+w+1).colRange(scaleduR0+incR-w,scaleduR0+incR+w+1);
 
-                float dist = cv::norm(IL,IR,cv::NORM_L1);
+                float dist = cv::norm(IL,IR,cv::NORM_L1);   // 求1范数，对应元素求差的最小距离
                 if(dist<bestDist)
                 {
                     bestDist =  dist;
@@ -951,23 +990,28 @@ void Frame::ComputeStereoMatches()
                 vDists[L+incR] = dist;
             }
 
+            // 找到窗口边界说明不太对
             if(bestincR==-L || bestincR==L)
                 continue;
 
+            // 取最佳索引的3个点，进行二次拟合 拟合的方式二次多项式
             // Sub-pixel match (Parabola fitting)
-            const float dist1 = vDists[L+bestincR-1];
+            // x坐标相当于-1，0，1
+            const float dist1 = vDists[L+bestincR-1];   
             const float dist2 = vDists[L+bestincR];
             const float dist3 = vDists[L+bestincR+1];
 
-            const float deltaR = (dist1-dist3)/(2.0f*(dist1+dist3-2.0f*dist2));
+            // 注这里实际上是以-1 0 1作为x轴坐标的！！
+            const float deltaR = (dist1-dist3)/(2.0f*(dist1+dist3-2.0f*dist2)); // 求出极值横坐标
 
+            // 极值在-1~1之间，因为取得点是-1~1
             if(deltaR<-1 || deltaR>1)
                 continue;
 
             // Re-scaled coordinate
-            float bestuR = mvScaleFactors[kpL.octave]*((float)scaleduR0+(float)bestincR+deltaR);
+            float bestuR = mvScaleFactors[kpL.octave]*((float)scaleduR0+(float)bestincR+deltaR);    //  求出右图坐标
 
-            float disparity = (uL-bestuR);
+            float disparity = (uL-bestuR);  // 左右图坐标计算出视差
 
             if(disparity>=minD && disparity<maxD)
             {
@@ -976,17 +1020,18 @@ void Frame::ComputeStereoMatches()
                     disparity=0.01;
                     bestuR = uL-0.01;
                 }
-                mvDepth[iL]=mbf/disparity;
+                mvDepth[iL]=mbf/disparity;  // 由视差恢复深度
                 mvuRight[iL] = bestuR;
-                vDistIdx.push_back(pair<int,int>(bestDist,iL));
+                vDistIdx.push_back(pair<int,int>(bestDist,iL)); // 这里计算的是hamming距离
             }
         }
     }
 
     sort(vDistIdx.begin(),vDistIdx.end());
-    const float median = vDistIdx[vDistIdx.size()/2].first;
-    const float thDist = 1.5f*1.4f*median;
+    const float median = vDistIdx[vDistIdx.size()/2].first; // 对所有匹配点进行排序，取中值
+    const float thDist = 1.5f*1.4f*median; // 阈值
 
+    // 剔除阈值较大的点
     for(int i=vDistIdx.size()-1;i>=0;i--)
     {
         if(vDistIdx[i].first<thDist)
@@ -999,7 +1044,7 @@ void Frame::ComputeStereoMatches()
     }
 }
 
-
+// 从RGBD图像中计算深度
 void Frame::ComputeStereoFromRGBD(const cv::Mat &imDepth)
 {
     mvuRight = vector<float>(N,-1);
@@ -1142,6 +1187,11 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timeSt
 
 }
 
+/**
+ * @brief 双目鱼眼匹配
+ * 1.只对重叠区域进行匹配
+ * 
+ */
 void Frame::ComputeStereoFishEyeMatches() {
     //Speed it up by matching keypoints in the lapping area
     vector<cv::KeyPoint> stereoLeft(mvKeys.begin() + monoLeft, mvKeys.end());
@@ -1152,21 +1202,28 @@ void Frame::ComputeStereoFishEyeMatches() {
 
     mvLeftToRightMatch = vector<int>(Nleft,-1);
     mvRightToLeftMatch = vector<int>(Nright,-1);
-    mvDepth = vector<float>(Nleft,-1.0f);
-    mvuRight = vector<float>(Nleft,-1);
-    mvStereo3Dpoints = vector<Eigen::Vector3f>(Nleft);
+    mvDepth = vector<float>(Nleft,-1.0f);               // 深度值
+    mvuRight = vector<float>(Nleft,-1);                 // 右图坐标
+    mvStereo3Dpoints = vector<Eigen::Vector3f>(Nleft);  // 3D点
     mnCloseMPs = 0;
 
     //Perform a brute force between Keypoint in the left and right image
     vector<vector<cv::DMatch>> matches;
 
-    BFmatcher.knnMatch(stereoDescLeft,stereoDescRight,matches,2);
+    // 暴力匹配 
+    // 鱼眼相机没有普通双目的行对应约束
+    // 极线几何复杂，难以预测匹配点位置
+    // 暴力搜索确保不遗漏正确匹配
+    BFmatcher.knnMatch(stereoDescLeft,stereoDescRight,matches,2);   // 寻找到最近两个匹配点
 
     int nMatches = 0;
     int descMatches = 0;
 
-    //Check matches using Lowe's ratio
+    // Check matches using Lowe's ratio 
+    // Lowe这里指的应该是sift算法里面的内容
     for(vector<vector<cv::DMatch>>::iterator it = matches.begin(); it != matches.end(); ++it){
+        // 每个元素 *it 是一个 vector<cv::DMatch>，通常包含该 query keypoint 在另一幅图中找到的前几名 best matches
+        // 如果最优匹配明显优于次优
         if((*it).size() >= 2 && (*it)[0].distance < (*it)[1].distance * 0.7){
             //For every good match, check parallax and reprojection error to discard spurious matches
             Eigen::Vector3f p3D;
@@ -1184,6 +1241,15 @@ void Frame::ComputeStereoFishEyeMatches() {
     }
 }
 
+/**
+ * @brief 仍然是视锥检查，主体逻辑应该是没什么变化的
+ * 
+ * @param pMP 
+ * @param viewingCosLimit 
+ * @param bRight 
+ * @return true 
+ * @return false 
+ */
 bool Frame::isInFrustumChecks(MapPoint *pMP, float viewingCosLimit, bool bRight) {
     // 3D in absolute coordinates
     Eigen::Vector3f P = pMP->GetWorldPos();

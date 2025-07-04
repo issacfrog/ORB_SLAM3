@@ -1074,6 +1074,14 @@ namespace ORB_SLAM3
             computeOrientation(mvImagePyramid[level], allKeypoints[level], umax);
     }
 
+    /**
+     * @brief 计算描述子
+     * 
+     * @param image 经过高斯模糊后的金字塔图像
+     * @param keypoints 该层提取到的关键点集合
+     * @param descriptors 输出矩阵，用于保存每个关键点的 32 字节 ORB 描述子
+     * @param pattern 描述子采样图案，是一组预定义的相对点对
+     */
     static void computeDescriptors(const Mat& image, vector<KeyPoint>& keypoints, Mat& descriptors,
                                    const vector<Point>& pattern)
     {
@@ -1083,6 +1091,20 @@ namespace ORB_SLAM3
             computeOrbDescriptor(keypoints[i], image, &pattern[0], descriptors.ptr((int)i));
     }
 
+    /**
+     * @brief 特征提取函数
+     * 在图像上提取金字塔多尺度 ORB 关键点和其描述子
+     * 1.计算图像金字塔
+     * 2.提取每层的关键点
+     * 3.按层进行遍历，对每层的特征点生成ORB描述子
+     * 4.计算特征点是否在左右目的重叠区域
+     * @param _image 
+     * @param _mask 
+     * @param _keypoints 
+     * @param _descriptors 
+     * @param vLappingArea 
+     * @return int 
+     */
     int ORBextractor::operator()( InputArray _image, InputArray _mask, vector<KeyPoint>& _keypoints,
                                   OutputArray _descriptors, std::vector<int> &vLappingArea)
     {
@@ -1093,9 +1115,11 @@ namespace ORB_SLAM3
         Mat image = _image.getMat();
         assert(image.type() == CV_8UC1 );
 
-        // Pre-compute the scale pyramid
+        // 预先计算图像金字塔
+        // Pre-compute the scale pyramid 
         ComputePyramid(image);
 
+        // 提取关键点
         vector < vector<KeyPoint> > allKeypoints;
         ComputeKeyPointsOctTree(allKeypoints);
         //ComputeKeyPointsOld(allKeypoints);
@@ -1115,13 +1139,15 @@ namespace ORB_SLAM3
 
         //_keypoints.clear();
         //_keypoints.reserve(nkeypoints);
-        _keypoints = vector<cv::KeyPoint>(nkeypoints);
+        _keypoints = vector<cv::KeyPoint>(nkeypoints);  // 预分配特征点数量
 
         int offset = 0;
         //Modified for speeding up stereo fisheye matching
+        // 执行多层遍历搜索，这里的层级在计算金字塔的时候完成计算
         int monoIndex = 0, stereoIndex = nkeypoints-1;
         for (int level = 0; level < nlevels; ++level)
         {
+            // 取出某层关键点
             vector<KeyPoint>& keypoints = allKeypoints[level];
             int nkeypointsLevel = (int)keypoints.size();
 
@@ -1129,17 +1155,21 @@ namespace ORB_SLAM3
                 continue;
 
             // preprocess the resized image
+            // 高斯模糊处理主要是进行类似低通滤波的效果
+            // 1.高频信号容易带来误匹配
+            // 2.模糊后的ORB描述子鲁棒性更强
             Mat workingMat = mvImagePyramid[level].clone();
             GaussianBlur(workingMat, workingMat, Size(7, 7), 2, 2, BORDER_REFLECT_101);
 
             // Compute the descriptors
             //Mat desc = descriptors.rowRange(offset, offset + nkeypointsLevel);
-            Mat desc = cv::Mat(nkeypointsLevel, 32, CV_8U);
+            Mat desc = cv::Mat(nkeypointsLevel, 32, CV_8U); // 预分配描述子矩阵 值得注意的是这个矩阵的定义
             computeDescriptors(workingMat, keypoints, desc, pattern);
 
             offset += nkeypointsLevel;
 
 
+            // 根据重叠与否进行了筛选
             float scale = mvScaleFactor[level]; //getScale(level, firstLevel, scaleFactor);
             int i = 0;
             for (vector<KeyPoint>::iterator keypoint = keypoints.begin(),
@@ -1150,12 +1180,14 @@ namespace ORB_SLAM3
                     keypoint->pt *= scale;
                 }
 
+                // 落入双目重叠区域，则可以进行立体匹配
                 if(keypoint->pt.x >= vLappingArea[0] && keypoint->pt.x <= vLappingArea[1]){
                     _keypoints.at(stereoIndex) = (*keypoint);
                     desc.row(i).copyTo(descriptors.row(stereoIndex));
                     stereoIndex--;
                 }
                 else{
+                    // 否则智能进行单目的处理
                     _keypoints.at(monoIndex) = (*keypoint);
                     desc.row(i).copyTo(descriptors.row(monoIndex));
                     monoIndex++;
