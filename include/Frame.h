@@ -345,7 +345,7 @@ public:
     //Number of KeyPoints extracted in the left and right images
     int Nleft, Nright;  // 左右相机提取的特征点数量
     //Number of Non Lapping Keypoints
-    int monoLeft, monoRight; // 双目中无法匹配到的特征点的数量
+    int monoLeft, monoRight; // 单独左右目提取到的特征点数量 实际上调用ORBextractor中的opeator得到，注意里面是没有在重叠区的返回的值
 
     //For stereo matching
     std::vector<int> mvLeftToRightMatch, mvRightToLeftMatch; // 左右相机匹配到的特征点索引 

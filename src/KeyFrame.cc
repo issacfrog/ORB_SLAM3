@@ -210,6 +210,7 @@ void KeyFrame::AddConnection(KeyFrame *pKF, const int &weight)
     UpdateBestCovisibles();
 }
 
+// todo
 void KeyFrame::UpdateBestCovisibles()
 {
     unique_lock<mutex> lock(mMutexConnections);
@@ -346,6 +347,7 @@ set<MapPoint*> KeyFrame::GetMapPoints()
     return s;
 }
 
+// todo
 int KeyFrame::TrackedMapPoints(const int &minObs)
 {
     unique_lock<mutex> lock(mMutexFeatures);
@@ -385,6 +387,7 @@ MapPoint* KeyFrame::GetMapPoint(const size_t &idx)
     return mvpMapPoints[idx];
 }
 
+// todo
 void KeyFrame::UpdateConnections(bool upParent)
 {
     map<KeyFrame*,int> KFcounter;
@@ -579,21 +582,27 @@ void KeyFrame::SetErase()
     }
 }
 
+// todo
+// 用于安全的删除关键帧，并维护系统的数据一致性
+// 具体包括断开连接
+// 重构生成树
+// 清理观测关系等等
 void KeyFrame::SetBadFlag()
 {
     {
         unique_lock<mutex> lock(mMutexConnections);
-        if(mnId==mpMap->GetInitKFid())
+        if(mnId==mpMap->GetInitKFid())  // 初始关键帧不能删除
         {
             return;
         }
-        else if(mbNotErase)
+        else if(mbNotErase)  // 如果该关键帧被标记为不可删除，则设置为待删除状态
         {
             mbToBeErased = true;
             return;
         }
     }
 
+    // 断开共视关系
     for(map<KeyFrame*,int>::iterator mit = mConnectedKeyFrameWeights.begin(), mend=mConnectedKeyFrameWeights.end(); mit!=mend; mit++)
     {
         mit->first->EraseConnection(this);
@@ -761,6 +770,7 @@ bool KeyFrame::IsInImage(const float &x, const float &y) const
     return (x>=mnMinX && x<mnMaxX && y>=mnMinY && y<mnMaxY);
 }
 
+// 双目反投影到世界坐标系下
 bool KeyFrame::UnprojectStereo(int i, Eigen::Vector3f &x3D)
 {
     const float z = mvDepth[i];
@@ -780,6 +790,7 @@ bool KeyFrame::UnprojectStereo(int i, Eigen::Vector3f &x3D)
         return false;
 }
 
+/// 知道地图点转换到相机坐标系下的深度
 float KeyFrame::ComputeSceneMedianDepth(const int q)
 {
     if(N==0)
@@ -796,6 +807,7 @@ float KeyFrame::ComputeSceneMedianDepth(const int q)
         Rcw = mRcw;
     }
 
+    // Xc = Rcw * Xw + tcw 世界坐标系下的点转换到相机坐标系下
     vector<float> vDepths;
     vDepths.reserve(N);
     Eigen::Matrix<float,1,3> Rcw2 = Rcw.row(2);
@@ -853,6 +865,7 @@ void KeyFrame::UpdateMap(Map* pMap)
     mpMap = pMap;
 }
 
+/// 存储
 void KeyFrame::PreSave(set<KeyFrame*>& spKF,set<MapPoint*>& spMP, set<GeometricCamera*>& spCam)
 {
     // Save the id of each MapPoint in this KF, there can be null pointer in the vector
@@ -928,6 +941,7 @@ void KeyFrame::PreSave(set<KeyFrame*>& spKF,set<MapPoint*>& spMP, set<GeometricC
         mBackupImuPreintegrated.CopyFrom(mpImuPreintegrated);
 }
 
+/// 后加载
 void KeyFrame::PostLoad(map<long unsigned int, KeyFrame*>& mpKFid, map<long unsigned int, MapPoint*>& mpMPid, map<unsigned int, GeometricCamera*>& mpCamId){
     // Rebuild the empty variables
 
@@ -940,6 +954,7 @@ void KeyFrame::PostLoad(map<long unsigned int, KeyFrame*>& mpKFid, map<long unsi
     // Each MapPoint sight from this KeyFrame
     mvpMapPoints.clear();
     mvpMapPoints.resize(N);
+    // 加载地图点
     for(int i=0; i<N; ++i)
     {
         if(mvBackupMapPointsId[i] != -1)
@@ -948,6 +963,7 @@ void KeyFrame::PostLoad(map<long unsigned int, KeyFrame*>& mpKFid, map<long unsi
             mvpMapPoints[i] = static_cast<MapPoint*>(NULL);
     }
 
+    // 加载权重
     // Conected KeyFrames with him weight
     mConnectedKeyFrameWeights.clear();
     for(map<long unsigned int, int>::const_iterator it = mBackupConnectedKeyFrameIdWeights.begin(), end = mBackupConnectedKeyFrameIdWeights.end();
@@ -1014,9 +1030,10 @@ void KeyFrame::PostLoad(map<long unsigned int, KeyFrame*>& mpKFid, map<long unsi
     mvBackupChildrensId.clear();
     mvBackupLoopEdgesId.clear();
 
-    UpdateBestCovisibles();
+    UpdateBestCovisibles(); // 共视
 }
 
+/// 带畸变投影
 bool KeyFrame::ProjectPointDistort(MapPoint* pMP, cv::Point2f &kp, float &u, float &v)
 {
 
@@ -1080,6 +1097,7 @@ bool KeyFrame::ProjectPointDistort(MapPoint* pMP, cv::Point2f &kp, float &u, flo
     return true;
 }
 
+/// 无畸变投影
 bool KeyFrame::ProjectPointUnDistort(MapPoint* pMP, cv::Point2f &kp, float &u, float &v)
 {
 
