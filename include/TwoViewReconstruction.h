@@ -71,23 +71,23 @@ namespace ORB_SLAM3
 
 
         // Keypoints from Reference Frame (Frame 1)
-        std::vector<cv::KeyPoint> mvKeys1;
+        std::vector<cv::KeyPoint> mvKeys1;  // 参考帧的特征点集合
 
         // Keypoints from Current Frame (Frame 2)
-        std::vector<cv::KeyPoint> mvKeys2;
+        std::vector<cv::KeyPoint> mvKeys2;  // 当前帧的特征点集合
 
         // Current Matches from Reference to Current
-        std::vector<Match> mvMatches12;
-        std::vector<bool> mvbMatched1;
+        std::vector<Match> mvMatches12;  // 
+        std::vector<bool> mvbMatched1;   // 
 
         // Calibration
-        Eigen::Matrix3f mK;
+        Eigen::Matrix3f mK;  // 相机内参矩阵
 
         // Standard Deviation and Variance
         float mSigma, mSigma2;
 
         // Ransac max iterations
-        int mMaxIterations;
+        int mMaxIterations; // RANSAC最大迭代次数
 
         // Ransac sets
         std::vector<std::vector<size_t> > mvSets;

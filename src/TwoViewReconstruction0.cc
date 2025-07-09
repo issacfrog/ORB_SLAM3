@@ -38,6 +38,24 @@ namespace ORB_SLAM3
         mMaxIterations = iterations;
     }
 
+    /**
+     * @brief 
+     * 1.创建关联关系
+     * 2.生成RANSAC迭代所需的随机点集
+     * 3.并行计算基础矩阵和单应矩阵
+     * 4.根据得分选择最佳模型
+     * 5.三角化匹配点
+     * 6.返回重建结果
+     * 
+     * @param vKeys1 
+     * @param vKeys2 
+     * @param vMatches12 
+     * @param T21 
+     * @param vP3D 
+     * @param vbTriangulated 
+     * @return true 
+     * @return false 
+     */
     bool TwoViewReconstruction::Reconstruct(const std::vector<cv::KeyPoint>& vKeys1, const std::vector<cv::KeyPoint>& vKeys2, const vector<int> &vMatches12,
                                              Sophus::SE3f &T21, vector<cv::Point3f> &vP3D, vector<bool> &vbTriangulated)
     {
@@ -47,6 +65,7 @@ namespace ORB_SLAM3
         mvKeys1 = vKeys1;
         mvKeys2 = vKeys2;
 
+        // 填充匹配关系
         // Fill structures with current keypoints and matches with reference frame
         // Reference Frame: 1, Current Frame: 2
         mvMatches12.clear();
@@ -80,6 +99,8 @@ namespace ORB_SLAM3
 
         DUtils::Random::SeedRandOnce(0);
 
+        // 计算基础矩阵需要8个点
+        // swap-and-pop方法，实际上是每次随机选择一个索引，然后将其与最后一个元素交换，然后删除最后一个元素，这样避免了重复元素
         for(int it=0; it<mMaxIterations; it++)
         {
             vAvailableIndices = vAllIndices;
@@ -87,16 +108,21 @@ namespace ORB_SLAM3
             // Select a minimum set
             for(size_t j=0; j<8; j++)
             {
+                // 随机选择一个索引
                 int randi = DUtils::Random::RandomInt(0,vAvailableIndices.size()-1);
+                // 获取索引对应的值
                 int idx = vAvailableIndices[randi];
 
+                // 将索引赋值给mvSets
                 mvSets[it][j] = idx;
 
+                // 将索引从vAvailableIndices中移除
                 vAvailableIndices[randi] = vAvailableIndices.back();
                 vAvailableIndices.pop_back();
             }
         }
 
+        // 并行计算基础矩阵和单应矩阵
         // Launch threads to compute in parallel a fundamental matrix and a homography
         vector<bool> vbMatchesInliersH, vbMatchesInliersF;
         float SH, SF;
@@ -128,6 +154,13 @@ namespace ORB_SLAM3
         }
     }
 
+    /**
+     * @brief 使用RANSAC算法寻找最佳单应矩阵
+     * 
+     * @param vbMatchesInliers 
+     * @param score 
+     * @param H21 
+     */
     void TwoViewReconstruction::FindHomography(vector<bool> &vbMatchesInliers, float &score, Eigen::Matrix3f &H21)
     {
         // Number of putative matches
@@ -136,8 +169,8 @@ namespace ORB_SLAM3
         // Normalize coordinates
         vector<cv::Point2f> vPn1, vPn2;
         Eigen::Matrix3f T1, T2;
-        Normalize(mvKeys1,vPn1, T1);
-        Normalize(mvKeys2,vPn2, T2);
+        Normalize(mvKeys1,vPn1, T1);        // 归一化参考帧和当前帧，具体逻辑需要再看一下
+        Normalize(mvKeys2,vPn2, T2);        // 
         Eigen::Matrix3f T2inv = T2.inverse();
 
         // Best Results variables
@@ -151,6 +184,8 @@ namespace ORB_SLAM3
         vector<bool> vbCurrentInliers(N,false);
         float currentScore;
 
+        // 执行RANSAC 前面的随机生成是RANSAC中随机采样的部分
+        // 这里是从随机采样的结果中选取最优
         // Perform all RANSAC iterations and save the solution with highest score
         for(int it=0; it<mMaxIterations; it++)
         {
@@ -163,10 +198,12 @@ namespace ORB_SLAM3
                 vPn2i[j] = vPn2[mvMatches12[idx].second];
             }
 
+            // 计算单应矩阵
             Eigen::Matrix3f Hn = ComputeH21(vPn1i,vPn2i);
             H21i = T2inv * Hn * T1;
             H12i = H21i.inverse();
 
+            // 检查单应矩阵
             currentScore = CheckHomography(H21i, H12i, vbCurrentInliers, mSigma);
 
             if(currentScore>score)

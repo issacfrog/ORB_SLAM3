@@ -191,7 +191,7 @@ protected:
     GLubyte* mThumbnail;
 
     bool mIsInUse;
-    bool mHasTumbnail;
+    bool mHasTumbnail;  // 是否存在缩略图 实际应该是没有用到
     bool mbBad = false;
 
     bool mbIsInertial;
