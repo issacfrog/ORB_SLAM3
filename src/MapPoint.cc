@@ -138,6 +138,7 @@ KeyFrame* MapPoint::GetReferenceKeyFrame()
     return mpRefKF;
 }
 
+// 注意这里是根据关键帧加的idx，看结构上是左右都加
 void MapPoint::AddObservation(KeyFrame* pKF, int idx)
 {
     unique_lock<mutex> lock(mMutexFeatures);
@@ -157,7 +158,7 @@ void MapPoint::AddObservation(KeyFrame* pKF, int idx)
         get<0>(indexes) = idx;
     }
 
-    mObservations[pKF]=indexes;
+    mObservations[pKF]=indexes; 
 
     if(!pKF->mpCamera2 && pKF->mvuRight[idx]>=0)
         nObs+=2;
@@ -245,8 +246,14 @@ MapPoint* MapPoint::GetReplaced()
     return mpReplaced;
 }
 
+/**
+ * @brief 替换地图点 实现处理地图点的操作
+ * 
+ * @param pMP 
+ */
 void MapPoint::Replace(MapPoint* pMP)
 {
+    // 自我替换去除
     if(pMP->mnId==this->mnId)
         return;
 
@@ -263,6 +270,8 @@ void MapPoint::Replace(MapPoint* pMP)
         mpReplaced = pMP;
     }
 
+    // 观测关系的转移
+    // 将观测到该map点的关键帧的观测关系转移到新的map点上
     for(map<KeyFrame*,tuple<int,int>>::iterator mit=obs.begin(), mend=obs.end(); mit!=mend; mit++)
     {
         // Replace measurement in keyframe
@@ -326,6 +335,10 @@ float MapPoint::GetFoundRatio()
     return static_cast<float>(mnFound)/mnVisible;
 }
 
+/**
+ * @brief 计算描述子
+ * 
+ */
 void MapPoint::ComputeDistinctiveDescriptors()
 {
     // Retrieve all observed descriptors
@@ -345,6 +358,7 @@ void MapPoint::ComputeDistinctiveDescriptors()
 
     vDescriptors.reserve(observations.size());
 
+    // 对所有观测点，建立描述子vector
     for(map<KeyFrame*,tuple<int,int>>::iterator mit=observations.begin(), mend=observations.end(); mit!=mend; mit++)
     {
         KeyFrame* pKF = mit->first;
@@ -368,6 +382,7 @@ void MapPoint::ComputeDistinctiveDescriptors()
     // Compute distances between them
     const size_t N = vDescriptors.size();
 
+    // 计算描述子之间的距离
     float Distances[N][N];
     for(size_t i=0;i<N;i++)
     {
@@ -398,7 +413,7 @@ void MapPoint::ComputeDistinctiveDescriptors()
 
     {
         unique_lock<mutex> lock(mMutexFeatures);
-        mDescriptor = vDescriptors[BestIdx].clone();
+        mDescriptor = vDescriptors[BestIdx].clone();    // 选择中位数作为最终的描述子 原因是对于随机噪声比较明显的情况，中位数的鲁棒性更好
     }
 }
 
@@ -423,6 +438,11 @@ bool MapPoint::IsInKeyFrame(KeyFrame *pKF)
     return (mObservations.count(pKF));
 }
 
+/**
+ * @brief 更新地图点的法向量和有效观测距离
+ * 1.法向量的定义是从多个观测帧看向改电的平均方向（单位向量）
+ * 2.有效观测距离的定义是：从参考帧看向地图点的距离，乘以尺度因子
+ */
 void MapPoint::UpdateNormalAndDepth()
 {
     map<KeyFrame*,tuple<int,int>> observations;
@@ -441,6 +461,7 @@ void MapPoint::UpdateNormalAndDepth()
     if(observations.empty())
         return;
 
+    // 法向量定义
     Eigen::Vector3f normal;
     normal.setZero();
     int n=0;
@@ -468,6 +489,10 @@ void MapPoint::UpdateNormalAndDepth()
     Eigen::Vector3f PC = Pos - pRefKF->GetCameraCenter();
     const float dist = PC.norm();
 
+    // 对于单目/双目关键帧，分别从不同数据结构中提取层级；
+    // 得到图像金字塔中此点所在的尺度层级 level；
+    // 该层级对应的尺度因子：levelScaleFactor；
+    // 整个金字塔的最大尺度因子：mvScaleFactors[nLevels-1]。
     tuple<int ,int> indexes = observations[pRefKF];
     int leftIndex = get<0>(indexes), rightIndex = get<1>(indexes);
     int level;

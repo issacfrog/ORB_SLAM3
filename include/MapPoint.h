@@ -170,37 +170,38 @@ public:
     void PostLoad(map<long unsigned int, KeyFrame*>& mpKFid, map<long unsigned int, MapPoint*>& mpMPid);
 
 public:
-    long unsigned int mnId;
-    static long unsigned int nNextId;
-    long int mnFirstKFid;
-    long int mnFirstFrame;
-    int nObs;
+    long unsigned int mnId;             // 地图点唯一id
+    static long unsigned int nNextId;   // 下一个地图点id
+    long int mnFirstKFid;               // 第一个观测到该地图点的关键帧id
+    long int mnFirstFrame;              // 第一个观测到该地图点的帧id
+    int nObs;                           // 观测到该地图点的关键帧数量
 
     // Variables used by the tracking
-    float mTrackProjX;
-    float mTrackProjY;
-    float mTrackDepth;
-    float mTrackDepthR;
-    float mTrackProjXR;
-    float mTrackProjYR;
-    bool mbTrackInView, mbTrackInViewR;
-    int mnTrackScaleLevel, mnTrackScaleLevelR;
-    float mTrackViewCos, mTrackViewCosR;
-    long unsigned int mnTrackReferenceForFrame;
-    long unsigned int mnLastFrameSeen;
+    float mTrackProjX;                          // 投影到当前帧的x坐标
+    float mTrackProjY;                          // 投影到当前帧的y坐标
+    float mTrackDepth;                          // 投影到当前帧的深度
+    float mTrackDepthR;                         // 投影到右目帧的深度
+    float mTrackProjXR;                         // 投影到右目帧的x坐标
+    float mTrackProjYR;                         // 投影到右目帧的y坐标
+    bool mbTrackInView, mbTrackInViewR;         // 是否在当前帧的视野中
+    int mnTrackScaleLevel, mnTrackScaleLevelR;  // 当前帧和右目帧的尺度等级
+    float mTrackViewCos, mTrackViewCosR;        // 当前帧和右目帧的视角余弦值
+    long unsigned int mnTrackReferenceForFrame; // 当前帧的参考帧id
+    long unsigned int mnLastFrameSeen;          // 最后被观测到的帧id
 
     // Variables used by local mapping
-    long unsigned int mnBALocalForKF;
-    long unsigned int mnFuseCandidateForKF;
+    long unsigned int mnBALocalForKF;          // 局部BA中的关键帧id
+    long unsigned int mnFuseCandidateForKF;    // 地图点融合的候选关键帧ID
 
     // Variables used by loop closing
-    long unsigned int mnLoopPointForKF;
-    long unsigned int mnCorrectedByKF;
-    long unsigned int mnCorrectedReference;    
-    Eigen::Vector3f mPosGBA;
-    long unsigned int mnBAGlobalForKF;
-    long unsigned int mnBALocalForMerge;
+    long unsigned int mnLoopPointForKF;         // 回环检测中的关键帧id
+    long unsigned int mnCorrectedByKF;          // 执行回环校正的关键帧ID
+    long unsigned int mnCorrectedReference;     // 校正参考ID
+    Eigen::Vector3f mPosGBA;                    // 全局BA中的位置
+    long unsigned int mnBAGlobalForKF;          // 全局BA中的关键帧id
+    long unsigned int mnBALocalForMerge;        // 局部BA中的关键帧id
 
+    // 地图融合用位姿
     // Variable used by merging
     Eigen::Vector3f mPosMerge;
     Eigen::Vector3f mNormalVectorMerge;
@@ -210,7 +211,7 @@ public:
     double mInvDepth;
     double mInitU;
     double mInitV;
-    KeyFrame* mpHostKF;
+    KeyFrame* mpHostKF; 
 
     static std::mutex mGlobalMutex;
 
