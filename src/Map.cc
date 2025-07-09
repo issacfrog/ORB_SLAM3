@@ -249,6 +249,13 @@ bool Map::IsBad()
 }
 
 
+/**
+ * @brief 地图的缩放旋转
+ * 
+ * @param T 
+ * @param s 
+ * @param bScaledVel 
+ */
 void Map::ApplyScaledRotation(const Sophus::SE3f &T, const float s, const bool bScaledVel)
 {
     unique_lock<mutex> lock(mMutexMap);
@@ -258,11 +265,12 @@ void Map::ApplyScaledRotation(const Sophus::SE3f &T, const float s, const bool b
     Eigen::Matrix3f Ryw = Tyw.rotationMatrix();
     Eigen::Vector3f tyw = Tyw.translation();
 
+    // 这里的缩小是将
     for(set<KeyFrame*>::iterator sit=mspKeyFrames.begin(); sit!=mspKeyFrames.end(); sit++)
     {
         KeyFrame* pKF = *sit;
         Sophus::SE3f Twc = pKF->GetPoseInverse();
-        Twc.translation() *= s;
+        Twc.translation() *= s; // 相机坐标下的所有keyframe的位姿都缩小s倍
         Sophus::SE3f Tyc = Tyw*Twc;
         Sophus::SE3f Tcy = Tyc.inverse();
         pKF->SetPose(Tcy);

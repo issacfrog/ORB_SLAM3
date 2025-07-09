@@ -159,12 +159,12 @@ protected:
 
     long unsigned int mnId;
 
-    std::set<MapPoint*> mspMapPoints;
-    std::set<KeyFrame*> mspKeyFrames;
+    std::set<MapPoint*> mspMapPoints;       // 地图点集合
+    std::set<KeyFrame*> mspKeyFrames;       // 关键帧集合
 
     // Save/load, the set structure is broken in libboost 1.58 for ubuntu 16.04, a vector is serializated
-    std::vector<MapPoint*> mvpBackupMapPoints;
-    std::vector<KeyFrame*> mvpBackupKeyFrames;
+    std::vector<MapPoint*> mvpBackupMapPoints; // 备份地图点
+    std::vector<KeyFrame*> mvpBackupKeyFrames; // 备份关键帧 不太用
 
     KeyFrame* mpKFinitial;
     KeyFrame* mpKFlowerID;
@@ -172,7 +172,7 @@ protected:
     unsigned long int mnBackupKFinitialID;
     unsigned long int mnBackupKFlowerID;
 
-    std::vector<MapPoint*> mvpReferenceMapPoints;
+    std::vector<MapPoint*> mvpReferenceMapPoints; // 参考地图点 似乎只在画图中使用
 
     bool mbImuInitialized;
 
