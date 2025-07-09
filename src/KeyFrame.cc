@@ -210,18 +210,23 @@ void KeyFrame::AddConnection(KeyFrame *pKF, const int &weight)
     UpdateBestCovisibles();
 }
 
-// todo
+/// 更新最佳共视排序
 void KeyFrame::UpdateBestCovisibles()
 {
     unique_lock<mutex> lock(mMutexConnections);
     vector<pair<int,KeyFrame*> > vPairs;
     vPairs.reserve(mConnectedKeyFrameWeights.size());
     for(map<KeyFrame*,int>::iterator mit=mConnectedKeyFrameWeights.begin(), mend=mConnectedKeyFrameWeights.end(); mit!=mend; mit++)
+    // make pair
+    // 它将两个值（通常是两个对象）组合成一个单一的对象，这个对象可以被视为一个包含两个元素的结构体
+    // 第一个元素是第一个值，第二个元素是第二个值，目的是能够根据权重进行排序
        vPairs.push_back(make_pair(mit->second,mit->first));
 
+    // 排序之后是升序
     sort(vPairs.begin(),vPairs.end());
     list<KeyFrame*> lKFs;
     list<int> lWs;
+    // 从头插入，转为降序
     for(size_t i=0, iend=vPairs.size(); i<iend;i++)
     {
         if(!vPairs[i].second->isBad())
@@ -347,7 +352,8 @@ set<MapPoint*> KeyFrame::GetMapPoints()
     return s;
 }
 
-// todo
+/// 用于统计关键帧中有效地图点的数量
+//  minObs 最小观测次数用于过滤
 int KeyFrame::TrackedMapPoints(const int &minObs)
 {
     unique_lock<mutex> lock(mMutexFeatures);
@@ -387,10 +393,10 @@ MapPoint* KeyFrame::GetMapPoint(const size_t &idx)
     return mvpMapPoints[idx];
 }
 
-// todo
+// 更新关键帧之间的共视连接关系
 void KeyFrame::UpdateConnections(bool upParent)
 {
-    map<KeyFrame*,int> KFcounter;
+    map<KeyFrame*,int> KFcounter;   // 统计与其他关键帧共视的次数
 
     vector<MapPoint*> vpMP;
 
@@ -415,10 +421,10 @@ void KeyFrame::UpdateConnections(bool upParent)
 
         for(map<KeyFrame*,tuple<int,int>>::iterator mit=observations.begin(), mend=observations.end(); mit!=mend; mit++)
         {
+            // 排除自己，排除坏帧，排除不在同一地图中的关键帧
             if(mit->first->mnId==mnId || mit->first->isBad() || mit->first->GetMap() != mpMap)
                 continue;
-            KFcounter[mit->first]++;
-
+            KFcounter[mit->first]++;  // 统计共视次数
         }
     }
 
@@ -445,6 +451,7 @@ void KeyFrame::UpdateConnections(bool upParent)
             nmax=mit->second;
             pKFmax=mit->first;
         }
+        // 共视超过一定数量的建立连接
         if(mit->second>=th)
         {
             vPairs.push_back(make_pair(mit->second,mit->first));
@@ -452,12 +459,14 @@ void KeyFrame::UpdateConnections(bool upParent)
         }
     }
 
+    // 如果没有超过阈值的，则只连接最强关键帧
     if(vPairs.empty())
     {
         vPairs.push_back(make_pair(nmax,pKFmax));
         pKFmax->AddConnection(this,nmax);
     }
 
+    // 根据共视次数进行排序
     sort(vPairs.begin(),vPairs.end());
     list<KeyFrame*> lKFs;
     list<int> lWs;
@@ -470,7 +479,7 @@ void KeyFrame::UpdateConnections(bool upParent)
     {
         unique_lock<mutex> lockCon(mMutexConnections);
 
-        mConnectedKeyFrameWeights = KFcounter;
+        mConnectedKeyFrameWeights = KFcounter;  // 存储所有共视关系
         mvpOrderedConnectedKeyFrames = vector<KeyFrame*>(lKFs.begin(),lKFs.end());
         mvOrderedWeights = vector<int>(lWs.begin(), lWs.end());
 
@@ -582,7 +591,7 @@ void KeyFrame::SetErase()
     }
 }
 
-// todo
+// 最复杂的操作是对树的重新连接
 // 用于安全的删除关键帧，并维护系统的数据一致性
 // 具体包括断开连接
 // 重构生成树
@@ -608,6 +617,7 @@ void KeyFrame::SetBadFlag()
         mit->first->EraseConnection(this);
     }
 
+    // 清理地图点
     for(size_t i=0; i<mvpMapPoints.size(); i++)
     {
         if(mvpMapPoints[i])
@@ -616,6 +626,7 @@ void KeyFrame::SetBadFlag()
         }
     }
 
+    // 重新构成树结构
     {
         unique_lock<mutex> lock(mMutexConnections);
         unique_lock<mutex> lock1(mMutexFeatures);
