@@ -215,7 +215,13 @@ namespace ORB_SLAM3
         }
     }
 
-
+    /**
+     * @brief 创建基础矩阵，基础流程与单应矩阵类似
+     * 
+     * @param vbMatchesInliers 
+     * @param score 
+     * @param F21 
+     */
     void TwoViewReconstruction::FindFundamental(vector<bool> &vbMatchesInliers, float &score, Eigen::Matrix3f &F21)
     {
         // Number of putative matches
@@ -266,6 +272,13 @@ namespace ORB_SLAM3
         }
     }
 
+    /**
+     * @brief 单应矩阵的DLT计算解法
+     * 
+     * @param vP1 
+     * @param vP2 
+     * @return Eigen::Matrix3f 
+     */
     Eigen::Matrix3f TwoViewReconstruction::ComputeH21(const vector<cv::Point2f> &vP1, const vector<cv::Point2f> &vP2)
     {
         const int N = vP1.size();
@@ -308,6 +321,13 @@ namespace ORB_SLAM3
         return H;
     }
 
+    /**
+     * @brief 基础矩阵的DLT计算解法
+     * 
+     * @param vP1 
+     * @param vP2 
+     * @return Eigen::Matrix3f 
+     */
     Eigen::Matrix3f TwoViewReconstruction::ComputeF21(const vector<cv::Point2f> &vP1,const vector<cv::Point2f> &vP2)
     {
         const int N = vP1.size();
@@ -344,6 +364,18 @@ namespace ORB_SLAM3
         return svd2.matrixU() * Eigen::DiagonalMatrix<float,3>(w) * svd2.matrixV().transpose();
     }
 
+    /**
+     * @brief 对于所有匹配到的特征点对，进行投影检查
+     * 1.计算投影误差
+     * 2.检查投影误差是否在阈值范围内
+     * 3.计算得分
+     * 4.返回得分 根据得分判断是否为内点，得分越高误差越小
+     * @param H21 
+     * @param H12 
+     * @param vbMatchesInliers 
+     * @param sigma 
+     * @return float 
+     */
     float TwoViewReconstruction::CheckHomography(const Eigen::Matrix3f &H21, const Eigen::Matrix3f &H12, vector<bool> &vbMatchesInliers, float sigma)
     {
         const int N = mvMatches12.size();
@@ -429,6 +461,14 @@ namespace ORB_SLAM3
         return score;
     }
 
+    /**
+     * @brief 与单应矩阵检查逻辑一致
+     * 
+     * @param F21 
+     * @param vbMatchesInliers 
+     * @param sigma 
+     * @return float 
+     */
     float TwoViewReconstruction::CheckFundamental(const Eigen::Matrix3f &F21, vector<bool> &vbMatchesInliers, float sigma)
     {
         const int N = mvMatches12.size();
@@ -509,6 +549,20 @@ namespace ORB_SLAM3
         return score;
     }
 
+    /**
+     * @brief 从基础矩阵中进行恢复
+     * 
+     * @param vbMatchesInliers 
+     * @param F21 
+     * @param K 
+     * @param T21 
+     * @param vP3D 
+     * @param vbTriangulated 
+     * @param minParallax 
+     * @param minTriangulated 
+     * @return true 
+     * @return false 
+     */
     bool TwoViewReconstruction::ReconstructF(vector<bool> &vbMatchesInliers, Eigen::Matrix3f &F21, Eigen::Matrix3f &K,
                                              Sophus::SE3f &T21, vector<cv::Point3f> &vP3D, vector<bool> &vbTriangulated, float minParallax, int minTriangulated)
     {
@@ -534,11 +588,13 @@ namespace ORB_SLAM3
         vector<bool> vbTriangulated1,vbTriangulated2,vbTriangulated3, vbTriangulated4;
         float parallax1,parallax2, parallax3, parallax4;
 
+        // 检查RT是否有效
         int nGood1 = CheckRT(R1,t1,mvKeys1,mvKeys2,mvMatches12,vbMatchesInliers,K, vP3D1, 4.0*mSigma2, vbTriangulated1, parallax1);
         int nGood2 = CheckRT(R2,t1,mvKeys1,mvKeys2,mvMatches12,vbMatchesInliers,K, vP3D2, 4.0*mSigma2, vbTriangulated2, parallax2);
         int nGood3 = CheckRT(R1,t2,mvKeys1,mvKeys2,mvMatches12,vbMatchesInliers,K, vP3D3, 4.0*mSigma2, vbTriangulated3, parallax3);
         int nGood4 = CheckRT(R2,t2,mvKeys1,mvKeys2,mvMatches12,vbMatchesInliers,K, vP3D4, 4.0*mSigma2, vbTriangulated4, parallax4);
 
+        // 选择最高得分，并判断是否都效果不错
         int maxGood = max(nGood1,max(nGood2,max(nGood3,nGood4)));
 
         int nMinGood = max(static_cast<int>(0.9*N),minTriangulated);
@@ -553,12 +609,15 @@ namespace ORB_SLAM3
         if(nGood4>0.7*maxGood)
             nsimilar++;
 
+        // 如果两个RT都效果不错，表明不能确定哪个最好
+        // 这一般对应着基线太短、特征太对称或者匹配错误几种情况
         // If there is not a clear winner or not enough triangulated points reject initialization
         if(maxGood<nMinGood || nsimilar>1)
         {
             return false;
         }
 
+        // 选择最高得分，进行恢复
         // If best reconstruction has enough parallax initialize
         if(maxGood==nGood1)
         {
@@ -631,11 +690,13 @@ namespace ORB_SLAM3
         float d2 = w(1);
         float d3 = w(2);
 
+        // 奇异值过于接近表示可能为退化或纯旋转
         if(d1/d2<1.00001 || d2/d3<1.00001)
         {
             return false;
         }
 
+        // 8种可能的RT 求解算法看14讲
         vector<Eigen::Matrix3f> vR;
         vector<Eigen::Vector3f> vt, vn;
         vR.reserve(8);
@@ -758,7 +819,7 @@ namespace ORB_SLAM3
             }
         }
 
-
+        // 筛选出最优，且比次有要好，则表明是有效点
         if(secondBestGood<0.75*bestGood && bestParallax>=minParallax && bestGood>minTriangulated && bestGood>0.9*N)
         {
             T21 = Sophus::SE3f(vR[bestSolutionIdx], vt[bestSolutionIdx]);
@@ -820,6 +881,23 @@ namespace ORB_SLAM3
         T(2,2) = 1.f;
     }
 
+    /**
+     * @brief 检查RT是否有效
+     * 对于非无穷远点进行重投影误差检查，检查方法思路与前面的方式基本一致
+     * 
+     * @param R 
+     * @param t 
+     * @param vKeys1 
+     * @param vKeys2 
+     * @param vMatches12 
+     * @param vbMatchesInliers 
+     * @param K 
+     * @param vP3D 
+     * @param th2 
+     * @param vbGood 
+     * @param parallax 
+     * @return int 
+     */
     int TwoViewReconstruction::CheckRT(const Eigen::Matrix3f &R, const Eigen::Vector3f &t, const vector<cv::KeyPoint> &vKeys1, const vector<cv::KeyPoint> &vKeys2,
                                        const vector<Match> &vMatches12, vector<bool> &vbMatchesInliers,
                                        const Eigen::Matrix3f &K, vector<cv::Point3f> &vP3D, float th2, vector<bool> &vbGood, float &parallax)
@@ -884,6 +962,7 @@ namespace ORB_SLAM3
 
             float cosParallax = normal1.dot(normal2) / (dist1*dist2);
 
+            // 如果太过平行，那么近似于是无限远的点，此时不适合进行三角化校验
             // Check depth in front of first camera (only if enough parallax, as "infinite" points can easily go to negative depth)
             if(p3dC1(2)<=0 && cosParallax<0.99998)
                 continue;
@@ -894,6 +973,7 @@ namespace ORB_SLAM3
             if(p3dC2(2)<=0 && cosParallax<0.99998)
                 continue;
 
+            // 检查重投影误差，根据距离计算好的点的数量，根据数量判断RT是否有效
             // Check reprojection error in first image
             float im1x, im1y;
             float invZ1 = 1.0/p3dC1(2);
@@ -937,6 +1017,14 @@ namespace ORB_SLAM3
         return nGood;
     }
 
+    /**
+     * @brief 分解本质矩阵，得到对应的RT 具体公式查14讲
+     * 
+     * @param E 
+     * @param R1 
+     * @param R2 
+     * @param t 
+     */
     void TwoViewReconstruction::DecomposeE(const Eigen::Matrix3f &E, Eigen::Matrix3f &R1, Eigen::Matrix3f &R2, Eigen::Vector3f &t)
     {
 
@@ -945,6 +1033,7 @@ namespace ORB_SLAM3
         Eigen::Matrix3f U = svd.matrixU();
         Eigen::Matrix3f Vt = svd.matrixV().transpose();
 
+        // 归一化模长
         t = U.col(2);
         t = t / t.norm();
 
