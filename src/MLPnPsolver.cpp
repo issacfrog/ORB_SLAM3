@@ -55,13 +55,15 @@ namespace ORB_SLAM3 {
     MLPnPsolver::MLPnPsolver(const Frame &F, const vector<MapPoint *> &vpMapPointMatches):
             mnInliersi(0), mnIterations(0), mnBestInliers(0), N(0), mpCamera(F.mpCamera){
         mvpMapPointMatches = vpMapPointMatches;
-        mvBearingVecs.reserve(F.mvpMapPoints.size());
-        mvP2D.reserve(F.mvpMapPoints.size());
-        mvSigma2.reserve(F.mvpMapPoints.size());
-        mvP3Dw.reserve(F.mvpMapPoints.size());
-        mvKeyPointIndices.reserve(F.mvpMapPoints.size());
-        mvAllIndices.reserve(F.mvpMapPoints.size());
+        mvBearingVecs.reserve(F.mvpMapPoints.size());       // 特征点方向向量
+        mvP2D.reserve(F.mvpMapPoints.size());               // 存储特征点的2D像素坐标
+        mvSigma2.reserve(F.mvpMapPoints.size());            // 特征点方差
+        mvP3Dw.reserve(F.mvpMapPoints.size());              // 存储特征点的3D世界坐标
+        mvKeyPointIndices.reserve(F.mvpMapPoints.size());   // 存储特征点索引
+        mvAllIndices.reserve(F.mvpMapPoints.size());        // 存储所有特征点索引
 
+        // 遍历筛选非空且好的地图点
+        // 然后一系列操作进行配置
         int idx = 0;
         for(size_t i = 0, iend = mvpMapPointMatches.size(); i < iend; i++){
             MapPoint* pMP = vpMapPointMatches[i];
@@ -96,6 +98,26 @@ namespace ORB_SLAM3 {
         SetRansacParameters();
     }
 
+    /// 基于RANSAC的位姿估计
+    /**
+     * @brief 
+     * 1. 如果点数过少则不处理
+     * 2. 主循环，迭代次数超过最大迭代次数或者当前迭代次数超过输入迭代次数
+     * 3. 随机选6个点
+     * 4. 计算相机位姿
+     * 5. 保存结果
+     * 6. 检查内调
+     * 7. 内点数量足够多 选取内点最多的结果
+     * 8. 细化位姿 如果成功则返回 
+     * 9. 如果迭代次数超过最大迭代次数，则返回最佳
+     * @param nIterations 当前迭代次数
+     * @param bNoMore 是否继续迭代的标志
+     * @param vbInliers 输出内点标记
+     * @param nInliers 输出内点数量
+     * @param Tout 输出位姿
+     * @return true 
+     * @return false 
+     */
     //RANSAC methods
     bool MLPnPsolver::iterate(int nIterations, bool &bNoMore, vector<bool> &vbInliers, int &nInliers, Eigen::Matrix4f &Tout){
         Tout.setIdentity();
@@ -103,6 +125,7 @@ namespace ORB_SLAM3 {
 	    vbInliers.clear();
 	    nInliers=0;
 
+        // 如果点数过少则不处理
 	    if(N<mRansacMinInliers)
 	    {
 	        bNoMore = true;
@@ -111,6 +134,7 @@ namespace ORB_SLAM3 {
 
 	    vector<size_t> vAvailableIndices;
 
+        // 主循环，迭代次数超过最大迭代次数或者当前迭代次数超过输入迭代次数
 	    int nCurrentIterations = 0;
 	    while(mnIterations<mRansacMaxIts || nCurrentIterations<nIterations)
 	    {
@@ -124,6 +148,7 @@ namespace ORB_SLAM3 {
             points_t p3DS(mRansacMinSet);
             vector<int> indexes(mRansacMinSet);
 
+            // 随机选6个点
 	        // Get min set of points
 	        for(short i = 0; i < mRansacMinSet; ++i)
 	        {
@@ -135,6 +160,7 @@ namespace ORB_SLAM3 {
                 p3DS[i] = mvP3Dw[idx];
                 indexes[i] = i;
 
+                // 经典的swap pop操作
 	            vAvailableIndices[randi] = vAvailableIndices.back();
 	            vAvailableIndices.pop_back();
 	        }
@@ -145,9 +171,11 @@ namespace ORB_SLAM3 {
             //Result
             transformation_t result;
 
+            // 计算相机位姿
 	        // Compute camera pose
             computePose(bearingVecs,p3DS,covs,indexes,result);
 
+            // 保存结果
             //Save result
             mRi[0][0] = result(0,0);
             mRi[0][1] = result(0,1);
@@ -163,9 +191,11 @@ namespace ORB_SLAM3 {
 
             mti[0] = result(0,3);mti[1] = result(1,3);mti[2] = result(2,3);
 
+            // 检查内调
 	        // Check inliers
 	        CheckInliers();
 
+            // 内点数量足够多 选取内点最多的结果
 	        if(mnInliersi>=mRansacMinInliers)
 	        {
 	            // If it is the best solution so far, save it
@@ -186,6 +216,8 @@ namespace ORB_SLAM3 {
                     Eigen::Vector3d eigtcw(mti);
 	            }
 
+                // 细化位姿 如果成功则返回 
+                // 细化的方式是使用所有内点重新计算位姿
 	            if(Refine())
 	            {
 	                nInliers = mnRefinedInliers;
@@ -202,6 +234,7 @@ namespace ORB_SLAM3 {
 	        }
 	    }
 
+        // 如果迭代次数超过最大迭代次数，则返回最佳
 	    if(mnIterations>=mRansacMaxIts)
 	    {
 	        bNoMore=true;
@@ -222,6 +255,7 @@ namespace ORB_SLAM3 {
 	    return false;
 	}
 
+    // 设置RANSAC参数
 	void MLPnPsolver::SetRansacParameters(double probability, int minInliers, int maxIterations, int minSet, float epsilon, float th2){
 		mRansacProb = probability;
 	    mRansacMinInliers = minInliers;
@@ -259,6 +293,8 @@ namespace ORB_SLAM3 {
 	        mvMaxError[i] = mvSigma2[i]*th2;
 	}
 
+    /// 检查内点
+    // 使用重投影误差的方式来判断是否为内点
     void MLPnPsolver::CheckInliers(){
         mnInliersi=0;
 
@@ -292,10 +328,19 @@ namespace ORB_SLAM3 {
         }
     }
 
+    /// 细化位姿
+    /**
+     * @brief 在RANSAC找到初步解后，使用所有内点重新计算更精确的相机位姿
+     * 注意这里使用的是所有内点，而不是RANSAC选的6个点
+     * @return true 
+     * @return false 
+     */
     bool MLPnPsolver::Refine(){
         vector<int> vIndices;
         vIndices.reserve(mvbBestInliers.size());
 
+        // 收集内点索引
+        // 
         for(size_t i=0; i<mvbBestInliers.size(); i++)
         {
             if(mvbBestInliers[i])
@@ -324,9 +369,11 @@ namespace ORB_SLAM3 {
         //Result
         transformation_t result;
 
+        // 计算相机位姿
         // Compute camera pose
         computePose(bearingVecs,p3DS,covs,indexes,result);
 
+        // 检查内点数量
         // Check inliers
         CheckInliers();
 
@@ -353,11 +400,26 @@ namespace ORB_SLAM3 {
     }
 
 	//MLPnP methods
+    /**
+     * @brief 计算相机位姿 MLPnP（Maximum Likelihood Perspective-n-Point)
+     * ORB-SLAM3的MLPnP设计参考了论文《MLPnP: A Real-Time Maximum Likelihood 
+     * Solution to the Perspective-n-Point Problem》，该论文通过实验验证了6个点
+     * 在实时性和精度上的最优平衡
+     * ​最小化重投影误差​​：优化相机位姿使得特征方向与3D点的投影误差最小。
+​     * ​鲁棒性设计​​：通过协方差矩阵加权、RANSAC筛选和多解优化，提升动态场景下的稳定性。
+     * @param f 
+     * @param p 
+     * @param covMats 
+     * @param indices 
+     * @param result 
+     */
     void MLPnPsolver::computePose(const bearingVectors_t &f, const points_t &p, const cov3_mats_t &covMats,
                                   const std::vector<int> &indices, transformation_t &result) {
+        // 至少6个对应点
         size_t numberCorrespondences = indices.size();
         assert(numberCorrespondences > 5);
 
+        // 计算每条射线的零空间（垂直平面）
         bool planar = false;
         // compute the nullspace of all vectors
         std::vector<Eigen::MatrixXd> nullspaces(numberCorrespondences);
@@ -383,6 +445,7 @@ namespace ORB_SLAM3 {
         Eigen::Matrix3d eigenRot;
         eigenRot.setIdentity();
 
+        // 根据矩阵的秩来判断是否为平面
         // if yes -> transform points to new eigen frame
         //if (minEigenVal < 1e-3 || minEigenVal == 0.0)
         //rankTest.setThreshold(1e-10);
@@ -397,6 +460,8 @@ namespace ORB_SLAM3 {
             for (size_t i = 0; i < numberCorrespondences; i++)
                 points3.col(i) = eigenRot * points3.col(i);
         }
+
+        
         //////////////////////////////////////
         // 2. stochastic model
         //////////////////////////////////////
@@ -407,6 +472,10 @@ namespace ORB_SLAM3 {
 
         // if we do have covariance information
         // -> fill covariance matrix
+        // 注：这里关于零空间的理解
+        // 1. 零空间是射线方向的垂直平面，在射线方向上我们没有很好的约束（类似于深度）
+        // 因此我们希望将误差投影到垂直于射线的平面上
+        // 2. 对于误差的协方差，其实是error^T * error来计算的
         if (covMats.size() == numberCorrespondences) {
             use_cov = true;
             int l = 0;
@@ -435,6 +504,7 @@ namespace ORB_SLAM3 {
             A = Eigen::MatrixXd(rowsA, 12);
         A.setZero();
 
+        // 平面与非平面
         // fill design matrix
         if (planar) {
             for (size_t i = 0; i < numberCorrespondences; ++i) {
@@ -541,6 +611,7 @@ namespace ORB_SLAM3 {
             tmp.col(0) = tmp.col(1).cross(tmp.col(2));
             tmp.transposeInPlace();
 
+            // 平面情况下有四种解，选择误差最小的解作为结果
             double scale = 1.0 / std::sqrt(std::abs(tmp.col(1).norm() * tmp.col(2).norm()));
             // find best rotation matrix in frobenius sense
             Eigen::JacobiSVD<Eigen::MatrixXd> svd_R_frob(tmp, Eigen::ComputeFullU | Eigen::ComputeFullV);
@@ -610,6 +681,7 @@ namespace ORB_SLAM3 {
             // scale translation
             tout = Rout * (scale * translation_t(result1(9, 0), result1(10, 0), result1(11, 0)));
 
+            // 平移有正负两种，这里是用重投影误差来选定
             // find correct direction in terms of reprojection error, just take the first 6 correspondences
             vector<double> error(2);
             vector<Eigen::Matrix4d, Eigen::aligned_allocator<Eigen::Matrix4d>> Ts(2);
@@ -648,6 +720,7 @@ namespace ORB_SLAM3 {
         minx[4] = tout[1];
         minx[5] = tout[2];
 
+        // 高斯牛顿优化
         mlpnp_gn(minx, points3v, nullspaces, P, use_cov);
 
         Rout = rodrigues2rot(rodrigues_t(minx[0], minx[1], minx[2]));
@@ -657,6 +730,7 @@ namespace ORB_SLAM3 {
         result.block<3, 1>(0, 3) = tout;
     }
 
+    // 罗德里格斯公式转换
     Eigen::Matrix3d MLPnPsolver::rodrigues2rot(const Eigen::Vector3d &omega) {
         rotation_t R = Eigen::Matrix3d::Identity();
 
@@ -691,6 +765,7 @@ namespace ORB_SLAM3 {
         return omega;
     }
 
+    /// 高斯牛顿法，看公式解即可
     void MLPnPsolver::mlpnp_gn(Eigen::VectorXd &x, const points_t &pts, const std::vector<Eigen::MatrixXd> &nullspaces,
                                const Eigen::SparseMatrix<double> Kll, bool use_cov) {
         const int numObservations = pts.size();
@@ -757,6 +832,7 @@ namespace ORB_SLAM3 {
         // result
     }
 
+    /// 计算残差和雅可比矩阵
     void MLPnPsolver::mlpnp_residuals_and_jacs(const Eigen::VectorXd &x, const points_t &pts,
                                                const std::vector<Eigen::MatrixXd> &nullspaces, Eigen::VectorXd &r,
                                                Eigen::MatrixXd &fjac, bool getJacs) {
@@ -768,13 +844,17 @@ namespace ORB_SLAM3 {
 
         Eigen::MatrixXd jacs(2, 6);
 
+        // 遍历所有点
         for (int i = 0; i < pts.size(); ++i)
         {
             Eigen::Vector3d ptCam = R*pts[i] + T;
             ptCam /= ptCam.norm();
 
+            // 残差计算
             r[ii] = nullspaces[i].col(0).transpose()*ptCam;
             r[ii + 1] = nullspaces[i].col(1).transpose()*ptCam;
+
+            // 计算雅可比矩阵
             if (getJacs)
             {
                 // jacs
@@ -805,6 +885,17 @@ namespace ORB_SLAM3 {
         }
     }
 
+    /// 计算雅可比矩阵
+    /**
+     * @brief 计算雅可比矩阵，具体公式没有进行推导
+     * 
+     * @param pt 
+     * @param nullspace_r 输入是两个零空间向量
+     * @param nullspace_s 
+     * @param w 
+     * @param t 
+     * @param jacs 返回雅可比
+     */
     void MLPnPsolver::mlpnpJacs(const point_t& pt, const Eigen::Vector3d& nullspace_r,
             					const Eigen::Vector3d& nullspace_s, const rodrigues_t& w,
             					const translation_t& t, Eigen::MatrixXd& jacs){

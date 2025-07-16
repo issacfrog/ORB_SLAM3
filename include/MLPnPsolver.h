@@ -55,6 +55,11 @@
 #include<Eigen/Dense>
 #include<Eigen/Sparse>
 
+
+/**
+ * @brief  MLPnP（Maximum Likelihood Perspective-n-Point）求解器
+ * 
+ */
 namespace ORB_SLAM3{
     class MLPnPsolver {
     public:
@@ -64,16 +69,18 @@ namespace ORB_SLAM3{
 
         ~MLPnPsolver();
 
+        // 实际对外暴露的接口
         void SetRansacParameters(double probability = 0.99, int minInliers = 8, int maxIterations = 300, int minSet = 6, float epsilon = 0.4,
                                  float th2 = 5.991);
 
         //Find metod is necessary?
 
+        // 核心求解函数
         bool iterate(int nIterations, bool &bNoMore, vector<bool> &vbInliers, int &nInliers, Eigen::Matrix4f &Tout);
 
         //Type definitions needed by the original code
 
-        /** A 3-vector of unit length used to describe landmark observations/bearings
+        /** A 3-vector of unit length used to describe landmark observations/bearings 方位
          *  in camera frames (always expressed in camera frames)
          */
         typedef Eigen::Vector3d bearingVector_t;
@@ -185,18 +192,18 @@ namespace ORB_SLAM3{
         //----------------------------------------------------
         //Fields of the solver
         //----------------------------------------------------
-        vector<MapPoint*> mvpMapPointMatches;
+        vector<MapPoint*> mvpMapPointMatches;   // 地图点匹配对
 
         // 2D Points
-        vector<cv::Point2f> mvP2D;
+        vector<cv::Point2f> mvP2D;              // 2D图像点
         //Substitued by bearing vectors
-        bearingVectors_t mvBearingVecs;
+        bearingVectors_t mvBearingVecs;         // 观测方向向量
 
-        vector<float> mvSigma2;
+        vector<float> mvSigma2;                 // 观测方差
 
         // 3D Points
         //vector<cv::Point3f> mvP3Dw;
-        points_t mvP3Dw;
+        points_t mvP3Dw;                        // 3D图像点
 
         // Index in Frame
         vector<size_t> mvKeyPointIndices;
