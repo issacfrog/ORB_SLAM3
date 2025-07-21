@@ -33,6 +33,7 @@
 #include <boost/archive/xml_iarchive.hpp>
 #include <boost/archive/xml_oarchive.hpp>
 
+/// @brief 系统及设置的一些入口，实机的调用在Tracking中
 namespace ORB_SLAM3
 {
 
@@ -241,6 +242,17 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
 
 }
 
+/// @brief 三种Tracking模式，区别是输入的图像类型差别
+/**
+ * @brief 双目跟踪
+ * 
+ * @param imLeft 
+ * @param imRight 
+ * @param timestamp 
+ * @param vImuMeas 
+ * @param filename 
+ * @return Sophus::SE3f 
+ */
 Sophus::SE3f System::TrackStereo(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timestamp, const vector<IMU::Point>& vImuMeas, string filename)
 {
     if(mSensor!=STEREO && mSensor!=IMU_STEREO)
@@ -347,6 +359,16 @@ Sophus::SE3f System::TrackStereo(const cv::Mat &imLeft, const cv::Mat &imRight, 
     return Tcw;
 }
 
+/**
+ * @brief 单目跟踪
+ * 
+ * @param im 
+ * @param depthmap 
+ * @param timestamp 
+ * @param vImuMeas 
+ * @param filename 
+ * @return Sophus::SE3f 
+ */
 Sophus::SE3f System::TrackRGBD(const cv::Mat &im, const cv::Mat &depthmap, const double &timestamp, const vector<IMU::Point>& vImuMeas, string filename)
 {
     if(mSensor!=RGBD  && mSensor!=IMU_RGBD)
@@ -418,6 +440,16 @@ Sophus::SE3f System::TrackRGBD(const cv::Mat &im, const cv::Mat &depthmap, const
     return Tcw;
 }
 
+
+/**
+ * @brief RGBD跟踪
+ * 
+ * @param im 
+ * @param timestamp 
+ * @param vImuMeas 
+ * @param filename 
+ * @return Sophus::SE3f 
+ */
 Sophus::SE3f System::TrackMonocular(const cv::Mat &im, const double &timestamp, const vector<IMU::Point>& vImuMeas, string filename)
 {
 
@@ -494,7 +526,6 @@ Sophus::SE3f System::TrackMonocular(const cv::Mat &im, const double &timestamp, 
 
     return Tcw;
 }
-
 
 
 void System::ActivateLocalizationMode()
@@ -588,6 +619,9 @@ bool System::isShutDown() {
     return mbShutDown;
 }
 
+
+/// @brief 保存轨迹
+/// @param filename 
 void System::SaveTrajectoryTUM(const string &filename)
 {
     cout << endl << "Saving camera trajectory to " << filename << " ..." << endl;
