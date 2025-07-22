@@ -142,7 +142,7 @@ void Optimizer::BundleAdjustment(const vector<KeyFrame *> &vpKFs, const vector<M
         const int id = pMP->mnId+maxKFid+1;
         vPoint->setId(id);
         vPoint->setMarginalized(true);
-        optimizer.addVertex(vPoint);
+        optimizer.addVertex(vPoint); 
 
        const map<KeyFrame*,tuple<int,int>> observations = pMP->GetObservations();
 

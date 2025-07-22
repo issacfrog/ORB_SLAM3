@@ -1450,7 +1450,15 @@ bool Tracking::GetStepByStep()
 }
 
 
-
+/**
+ * @brief 最终调用的都是Tracking函数
+ * 
+ * @param imRectLeft 
+ * @param imRectRight 
+ * @param timestamp 
+ * @param filename 
+ * @return Sophus::SE3f 
+ */
 Sophus::SE3f Tracking::GrabImageStereo(const cv::Mat &imRectLeft, const cv::Mat &imRectRight, const double &timestamp, string filename)
 {
     /// 1.转为灰度图，注意ORB是在灰度通道上做的工作
@@ -1624,6 +1632,11 @@ void Tracking::GrabImuData(const IMU::Point &imuMeasurement)
     mlQueueImuData.push_back(imuMeasurement);
 }
 
+
+/**
+ * @brief 预积分函数
+ * 
+ */
 void Tracking::PreintegrateIMU()
 {
 
@@ -1741,7 +1754,6 @@ void Tracking::PreintegrateIMU()
     //Verbose::PrintMess("Preintegration is finished!! ", Verbose::VERBOSITY_DEBUG);
 }
 
-
 /**
  * @brief 注意这里实际使用了预积分的结果
  * 差别是使用上一帧关键帧还是上一帧的
@@ -1858,7 +1870,7 @@ void Tracking::Track()
                     }
                     else
                     {
-                        CreateMapInAtlas();
+                        CreateMapInAtlas(); // 创建地图
                     }
                 }
                 else
@@ -2350,7 +2362,7 @@ void Tracking::Track()
 #endif
 }
 
-
+/// @brief 
 void Tracking::StereoInitialization()
 {
     if(mCurrentFrame.N>500)
@@ -2463,7 +2475,7 @@ void Tracking::StereoInitialization()
     }
 }
 
-
+/// @brief 
 void Tracking::MonocularInitialization()
 {
 
@@ -2541,7 +2553,7 @@ void Tracking::MonocularInitialization()
 }
 
 
-
+/// @brief 
 void Tracking::CreateInitialMapMonocular()
 {
     // Create KeyFrames
@@ -2718,6 +2730,7 @@ void Tracking::CreateMapInAtlas()
     mbCreatedMap = true;
 }
 
+/// @brief 
 void Tracking::CheckReplacedInLastFrame()
 {
     for(int i =0; i<mLastFrame.N; i++)
@@ -2737,7 +2750,7 @@ void Tracking::CheckReplacedInLastFrame()
 
 
 /**
- * @brief 
+ * @brief 使用参考帧进行Tracking
  * 
  * @return true 
  * @return false 
@@ -2808,6 +2821,7 @@ bool Tracking::TrackReferenceKeyFrame()
         return nmatchesMap>=10;
 }
 
+/// @brief 
 void Tracking::UpdateLastFrame()
 {
     // Update pose according to reference keyframe
@@ -2989,6 +3003,8 @@ bool Tracking::TrackWithMotionModel()
         return nmatchesMap>=10;
 }
 
+/// @brief 
+/// @return 
 bool Tracking::TrackLocalMap()
 {
 
