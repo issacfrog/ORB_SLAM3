@@ -82,20 +82,21 @@ public:
 
     std::mutex mMutexImuInit;
 
-    Eigen::MatrixXd mcovInertial;
-    Eigen::Matrix3d mRwg;
-    Eigen::Vector3d mbg;
-    Eigen::Vector3d mba;
-    double mScale;
-    double mInitTime;
-    double mCostTime;
+    Eigen::MatrixXd mcovInertial;       // IMU的协方差矩阵
+    Eigen::Matrix3d mRwg;               // 重力方向
+    Eigen::Vector3d mbg;                // 陀螺仪偏置
+    Eigen::Vector3d mba;                // 加速度计偏置
+    double mScale;                      // 尺度因子
+    double mInitTime;                   // 初始化时间
+    double mCostTime;                   // 处理时间
 
-    unsigned int mInitSect;
-    unsigned int mIdxInit;
-    unsigned int mnKFs;
-    double mFirstTs;
-    int mnMatchesInliers;
+    unsigned int mInitSect;             // 初始化阶段编号 打印用
+    unsigned int mIdxInit;              // 实际没用到
+    unsigned int mnKFs;                 // 实际没有用到
+    double mFirstTs;                    // 首帧关键帧时间
+    int mnMatchesInliers;               // 实际没有用到
 
+    // 调试相关忽略
     // For debugging (erase in normal mode)
     int mInitFr;
     int mIdxIteration;
@@ -107,6 +108,7 @@ public:
 
     bool mbWriteStats;
 
+    // 判断是否过远帧时使用的
     // not consider far points (clouds)
     bool mbFarPoints;
     float mThFarPoints;
@@ -139,10 +141,10 @@ protected:
     void SearchInNeighbors();
     void KeyFrameCulling();
 
-    System *mpSystem;
+    System *mpSystem;       // 系统指针
 
-    bool mbMonocular;
-    bool mbInertial;
+    bool mbMonocular;       // 是否为单目
+    bool mbInertial;        // 是否为IMU
 
     void ResetIfRequested();
     bool mbResetRequested;
@@ -156,16 +158,16 @@ protected:
     bool mbFinished;
     std::mutex mMutexFinish;
 
-    Atlas* mpAtlas;
+    Atlas* mpAtlas;         // 地图指针
 
-    LoopClosing* mpLoopCloser;
-    Tracking* mpTracker;
+    LoopClosing* mpLoopCloser; // 回环检测指针
+    Tracking* mpTracker;       // 跟踪指针
 
-    std::list<KeyFrame*> mlNewKeyFrames;
+    std::list<KeyFrame*> mlNewKeyFrames; // 新关键帧队列
 
-    KeyFrame* mpCurrentKeyFrame;
+    KeyFrame* mpCurrentKeyFrame; // 当前关键帧
 
-    std::list<MapPoint*> mlpRecentAddedMapPoints;
+    std::list<MapPoint*> mlpRecentAddedMapPoints; // 最近添加的地图点队列，主要在MapPointCulling中使用
 
     std::mutex mMutexNewKFs;
 
@@ -185,8 +187,8 @@ protected:
     bool bInitializing;
 
     Eigen::MatrixXd infoInertial;
-    int mNumLM;
-    int mNumKFCulling;
+    int mNumLM;         // 没有用到
+    int mNumKFCulling;  // 没有用到
 
     float mTinit;
 
