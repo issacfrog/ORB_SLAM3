@@ -33,6 +33,13 @@
 #include <mutex>
 #include "Thirdparty/g2o/g2o/types/types_seven_dof_expmap.h"
 
+/**
+ * @brief 
+ * 1. 使用BoW词袋模型进行回环候选帧的检测
+ * 2. 匹配地图点，估计Sim(3)变换
+ * 3. 执行闭环校正
+ * 4. 执行地图融合与全局BA
+ */
 namespace ORB_SLAM3
 {
 
@@ -46,7 +53,7 @@ class LoopClosing
 {
 public:
 
-    typedef pair<set<KeyFrame*>,int> ConsistentGroup;    
+    typedef pair<set<KeyFrame*>,int> ConsistentGroup;       // 
     typedef map<KeyFrame*,g2o::Sim3,std::less<KeyFrame*>,
         Eigen::aligned_allocator<std::pair<KeyFrame* const, g2o::Sim3> > > KeyFrameAndPose;
 
@@ -144,6 +151,7 @@ protected:
 
     void CheckObservations(set<KeyFrame*> &spKFsMap1, set<KeyFrame*> &spKFsMap2);
 
+    // 一些控制相关的变量
     void ResetIfRequested();
     bool mbResetRequested;
     bool mbResetActiveMapRequested;
@@ -156,15 +164,15 @@ protected:
     bool mbFinished;
     std::mutex mMutexFinish;
 
-    Atlas* mpAtlas;
+    Atlas* mpAtlas;          // 地图管理器
     Tracking* mpTracker;
 
-    KeyFrameDatabase* mpKeyFrameDB;
-    ORBVocabulary* mpORBVocabulary;
+    KeyFrameDatabase* mpKeyFrameDB;  // 用于 BoW 检索回环候选帧的数据库
+    ORBVocabulary* mpORBVocabulary;  // BoW词袋
 
-    LocalMapping *mpLocalMapper;
+    LocalMapping *mpLocalMapper;    // 局部地图指针
 
-    std::list<KeyFrame*> mlpLoopKeyFrameQueue;
+    std::list<KeyFrame*> mlpLoopKeyFrameQueue;  // 回环检测队列
 
     std::mutex mMutexLoopQueue;
 
@@ -172,20 +180,23 @@ protected:
     float mnCovisibilityConsistencyTh;
 
     // Loop detector variables
-    KeyFrame* mpCurrentKF;
-    KeyFrame* mpLastCurrentKF;
-    KeyFrame* mpMatchedKF;
-    std::vector<ConsistentGroup> mvConsistentGroups;
-    std::vector<KeyFrame*> mvpEnoughConsistentCandidates;
-    std::vector<KeyFrame*> mvpCurrentConnectedKFs;
-    std::vector<MapPoint*> mvpCurrentMatchedPoints;
-    std::vector<MapPoint*> mvpLoopMapPoints;
-    cv::Mat mScw;
-    g2o::Sim3 mg2oScw;
+    KeyFrame* mpCurrentKF;       // 当前关键帧
+    KeyFrame* mpLastCurrentKF;   // 上一关键帧
+    KeyFrame* mpMatchedKF;       // 匹配关键帧
 
+    std::vector<ConsistentGroup> mvConsistentGroups;        // 实际没有用到？
+    std::vector<KeyFrame*> mvpEnoughConsistentCandidates;
+    std::vector<KeyFrame*> mvpCurrentConnectedKFs;      // 当前关键帧的共视关键帧
+    std::vector<MapPoint*> mvpCurrentMatchedPoints;     // 当前点匹配的地图点 实际没有用到？
+    std::vector<MapPoint*> mvpLoopMapPoints;            // 回环地图点
+    cv::Mat mScw;                                       // 当前关键帧到世界坐标系的位姿（OpenCV格式）
+    g2o::Sim3 mg2oScw;                                  // Sim(3) 形式的校正位姿（g2o格式）
+
+    
     //-------
     Map* mpLastMap;
 
+    // 回环检测相关变量
     bool mbLoopDetected;
     int mnLoopNumCoincidences;
     int mnLoopNumNotFound;
@@ -195,6 +206,8 @@ protected:
     KeyFrame* mpLoopMatchedKF;
     std::vector<MapPoint*> mvpLoopMPs;
     std::vector<MapPoint*> mvpLoopMatchedMPs;
+
+    // 地图融合相关变量
     bool mbMergeDetected;
     int mnMergeNumCoincidences;
     int mnMergeNumNotFound;
@@ -207,11 +220,12 @@ protected:
     std::vector<MapPoint*> mvpMergeMatchedMPs;
     std::vector<KeyFrame*> mvpMergeConnectedKFs;
 
-    g2o::Sim3 mSold_new;
+    g2o::Sim3 mSold_new;    // 固定新地图
     //-------
 
     long unsigned int mLastLoopKFid;
 
+    // 控制BA执行的一些变量
     // Variables related to Global Bundle Adjustment
     bool mbRunningGBA;
     bool mbFinishedGBA;
@@ -220,16 +234,15 @@ protected:
     std::thread* mpThreadGBA;
 
     // Fix scale in the stereo/RGB-D case
-    bool mbFixScale;
+    bool mbFixScale;    // 是否固定尺度
 
 
     bool mnFullBAIdx;
 
 
-
-    vector<double> vdPR_CurrentTime;
-    vector<double> vdPR_MatchedTime;
-    vector<int> vnPR_TypeRecogn;
+    vector<double> vdPR_CurrentTime;     // 实际没有用到
+    vector<double> vdPR_MatchedTime;     // 实际没有用到
+    vector<int> vnPR_TypeRecogn;         // 实际没有用到
 
     //DEBUG
     string mstrFolderSubTraj;
@@ -238,7 +251,7 @@ protected:
 
 
     // To (de)activate LC
-    bool mbActiveLC = true;
+    bool mbActiveLC = true; // 是否激活回环检测
 
 #ifdef REGISTER_LOOP
     string mstrFolderLoop;
