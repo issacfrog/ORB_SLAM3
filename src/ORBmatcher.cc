@@ -1232,6 +1232,10 @@ namespace ORB_SLAM3
     }
 
     /// LoopMapping中使用
+    // 目标：
+    // 通过投影几何，在一个关键帧中搜索能观测到的地图点；
+    // 若能观测并成功匹配，则将该地图点加入该关键帧的观测列表中；
+    // 若发现两个 MapPoint 实际对应同一个物理点（通过投影后匹配上了），则执行融合（merge）。
     /**
      * @brief 
      * 1.获取相机参数和地图点数
@@ -1433,6 +1437,7 @@ namespace ORB_SLAM3
                 }
                 else
                 {
+                    // 最终是将MapPoint与KF之间构建关联关系
                     pMP->AddObservation(pKF,bestIdx);
                     pKF->AddMapPoint(pMP,bestIdx);
                 }

@@ -770,16 +770,26 @@ void LocalMapping::CreateNewMapPoints()
     }    
 }
 
+/**
+ * @brief 思想是融合当前帧与目标帧的mappoint，增强观测
+ * 1. 获取当前帧的一阶和二阶邻居关键帧，如果有IMU则扩展到时间上的邻居，由此得到所有目标关键帧
+ * 2. 尝试将目标关键帧中的地图点与当前帧的进行fuse
+ * 3. 将所有目标帧中的地图点与当前帧进行fuse
+ * 4. 更新地图点
+ */
 void LocalMapping::SearchInNeighbors()
 {
     // Retrieve neighbor keyframes
     int nn = 10;
     if(mbMonocular)
         nn=30;
+
+    // 获取共视关系最好的nn个关键帧
     const vector<KeyFrame*> vpNeighKFs = mpCurrentKeyFrame->GetBestCovisibilityKeyFrames(nn);
     vector<KeyFrame*> vpTargetKFs;
     for(vector<KeyFrame*>::const_iterator vit=vpNeighKFs.begin(), vend=vpNeighKFs.end(); vit!=vend; vit++)
     {
+        // 剔除掉不好的关键帧和已经搜索过的关键帧
         KeyFrame* pKFi = *vit;
         if(pKFi->isBad() || pKFi->mnFuseTargetForKF == mpCurrentKeyFrame->mnId)
             continue;
@@ -787,6 +797,7 @@ void LocalMapping::SearchInNeighbors()
         pKFi->mnFuseTargetForKF = mpCurrentKeyFrame->mnId;
     }
 
+    // 在一阶邻居的基础上，再扩展到二阶邻居
     // Add some covisible of covisible
     // Extend to some second neighbors if abort is not requested
     for(int i=0, imax=vpTargetKFs.size(); i<imax; i++)
@@ -804,6 +815,7 @@ void LocalMapping::SearchInNeighbors()
             break;
     }
 
+    // 如果IMU初始化成功，则再扩展到时间上的邻居
     // Extend to temporal neighbors
     if(mbInertial)
     {
@@ -821,6 +833,8 @@ void LocalMapping::SearchInNeighbors()
         }
     }
 
+    // 将目标帧与当前帧进行fuse
+    // 找出目标帧能否观测当前帧的点，增强目标帧观测
     // Search matches by projection from current KF in target KFs
     ORBmatcher matcher;
     vector<MapPoint*> vpMapPointMatches = mpCurrentKeyFrame->GetMapPointMatches();
@@ -828,6 +842,7 @@ void LocalMapping::SearchInNeighbors()
     {
         KeyFrame* pKFi = *vit;
 
+        // 目标帧投影到当前帧
         matcher.Fuse(pKFi,vpMapPointMatches);
         if(pKFi->NLeft != -1) matcher.Fuse(pKFi,vpMapPointMatches,true);
     }
@@ -836,6 +851,7 @@ void LocalMapping::SearchInNeighbors()
     if (mbAbortBA)
         return;
 
+    // 获取所有目标帧的mappoint
     // Search matches by projection from target KFs in current KF
     vector<MapPoint*> vpFuseCandidates;
     vpFuseCandidates.reserve(vpTargetKFs.size()*vpMapPointMatches.size());
@@ -858,10 +874,12 @@ void LocalMapping::SearchInNeighbors()
         }
     }
 
+    // 将目标帧中的mappoint与当前帧进行fuse
     matcher.Fuse(mpCurrentKeyFrame,vpFuseCandidates);
+    // 找出当前帧能否观测目标帧的点，增强当前帧观测
     if(mpCurrentKeyFrame->NLeft != -1) matcher.Fuse(mpCurrentKeyFrame,vpFuseCandidates,true);
 
-
+    // 更新地图点
     // Update points
     vpMapPointMatches = mpCurrentKeyFrame->GetMapPointMatches();
     for(size_t i=0, iend=vpMapPointMatches.size(); i<iend; i++)
@@ -877,6 +895,7 @@ void LocalMapping::SearchInNeighbors()
         }
     }
 
+    // 更新共视关系
     // Update connections in covisibility graph
     mpCurrentKeyFrame->UpdateConnections();
 }
@@ -958,8 +977,16 @@ void LocalMapping::InterruptBA()
     mbAbortBA = true;
 }
 
+/**
+ * @brief 关键帧剔除操作 剔除那些“可被其他关键帧很好地替代”的 冗余关键帧
+ * 核心目的：剔除当前关键帧的局部共视帧中冗余的关键帧，优化地图结构
+ * 冗余判断标准：关键帧中超过阈值比例的 MapPoint 能被其他 ≥3 个帧看到，且在相同或更精细的尺度下
+ * IMU 特别处理：保留一定数量的关键帧用于 IMU 优化；维护帧间时间链结构和预积分信息
+ * 好处：避免地图膨胀、减少图优化开销、提高系统运行效率
+ */
 void LocalMapping::KeyFrameCulling()
 {
+    // 冗余帧的定义
     // Check redundant keyframes (only local keyframes)
     // A keyframe is considered redundant if the 90% of the MapPoints it sees, are seen
     // in at least other 3 keyframes (in the same or finer scale)
@@ -994,7 +1021,7 @@ void LocalMapping::KeyFrameCulling()
     }
 
 
-
+    // 遍历所有关键帧
     for(vector<KeyFrame*>::iterator vit=vpLocalKeyFrames.begin(), vend=vpLocalKeyFrames.end(); vit!=vend; vit++)
     {
         count++;
@@ -1022,6 +1049,7 @@ void LocalMapping::KeyFrameCulling()
                     }
 
                     nMPs++;
+                    // 如果mappoint被观测次数大于阈值
                     if(pMP->Observations()>thObs)
                     {
                         const int &scaleLevel = (pKF -> NLeft == -1) ? pKF->mvKeysUn[i].octave
@@ -1029,6 +1057,7 @@ void LocalMapping::KeyFrameCulling()
                                                                                           : pKF -> mvKeysRight[i].octave;
                         const map<KeyFrame*, tuple<int,int>> observations = pMP->GetObservations();
                         int nObs=0;
+
                         for(map<KeyFrame*, tuple<int,int>>::const_iterator mit=observations.begin(), mend=observations.end(); mit!=mend; mit++)
                         {
                             KeyFrame* pKFi = mit->first;
@@ -1049,7 +1078,7 @@ void LocalMapping::KeyFrameCulling()
                                                                                                   : scaleLeveli;
                                 }
                             }
-
+                            // 且观测的尺度差不多
                             if(scaleLeveli<=scaleLevel+1)
                             {
                                 nObs++;
@@ -1059,13 +1088,14 @@ void LocalMapping::KeyFrameCulling()
                         }
                         if(nObs>thObs)
                         {
-                            nRedundantObservations++;
+                            nRedundantObservations++;   // 计算重复观测点的
                         }
                     }
                 }
             }
         }
 
+        // 如果重复观测点的比例大于阈值，则认为该关键帧是冗余的
         if(nRedundantObservations>redundant_th*nMPs)
         {
             if (mbInertial)
@@ -1087,7 +1117,7 @@ void LocalMapping::KeyFrameCulling()
                         pKF->mPrevKF->mNextKF = pKF->mNextKF;
                         pKF->mNextKF = NULL;
                         pKF->mPrevKF = NULL;
-                        pKF->SetBadFlag();
+                        pKF->SetBadFlag();  // 执行剔除操作
                     }
                     else if(!mpCurrentKeyFrame->GetMap()->GetIniertialBA2() && ((pKF->GetImuPosition()-pKF->mPrevKF->GetImuPosition()).norm()<0.02) && (t<3))
                     {
@@ -1105,6 +1135,8 @@ void LocalMapping::KeyFrameCulling()
                 pKF->SetBadFlag();
             }
         }
+
+        // 如果关键帧数量大于20或者100，则停止，目的是为了防止在这里处理时间过长
         if((count > 20 && mbAbortBA) || count>100)
         {
             break;
@@ -1229,6 +1261,14 @@ bool LocalMapping::isFinished()
     return mbFinished;
 }
 
+/**
+ * @brief 初始化IMU
+ * 核心逻辑大差不差，收集有效的关键帧，优化并将优化结果更新
+ * 
+ * @param priorG 
+ * @param priorA 
+ * @param bFIBA 
+ */
 void LocalMapping::InitializeIMU(float priorG, float priorA, bool bFIBA)
 {
     if (mbResetRequested)
@@ -1236,6 +1276,7 @@ void LocalMapping::InitializeIMU(float priorG, float priorA, bool bFIBA)
 
     float minTime;
     int nMinKF;
+    // 单目双目不同情况
     if (mbMonocular)
     {
         minTime = 2.0;
@@ -1247,10 +1288,11 @@ void LocalMapping::InitializeIMU(float priorG, float priorA, bool bFIBA)
         nMinKF = 10;
     }
 
-
+    // 关键帧数量不足，返回
     if(mpAtlas->KeyFramesInMap()<nMinKF)
         return;
 
+    // 按照时间关系获取所有历史关键帧
     // Retrieve all keyframe in temporal order
     list<KeyFrame*> lpKF;
     KeyFrame* pKF = mpCurrentKeyFrame;
@@ -1265,6 +1307,7 @@ void LocalMapping::InitializeIMU(float priorG, float priorA, bool bFIBA)
     if(vpKF.size()<nMinKF)
         return;
 
+    // 时间间隔也要足够长
     mFirstTs=vpKF.front()->mTimeStamp;
     if(mpCurrentKeyFrame->mTimeStamp-mFirstTs<minTime)
         return;
@@ -1281,6 +1324,8 @@ void LocalMapping::InitializeIMU(float priorG, float priorA, bool bFIBA)
     const int N = vpKF.size();
     IMU::Bias b(0,0,0,0,0,0);
 
+    // 计算KF速度和Rwg的估计值 这里使用的是关键帧之间的速度积分来初始化重力
+    // 这里的一个隐含假设是忽略掉自身加速度
     // Compute and KF velocities mRwg estimation
     if (!mpCurrentKeyFrame->GetMap()->isImuInitialized())
     {
@@ -1322,11 +1367,13 @@ void LocalMapping::InitializeIMU(float priorG, float priorA, bool bFIBA)
 
     mInitTime = mpTracker->mLastFrame.mTimeStamp-vpKF.front()->mTimeStamp;
 
+    // 执行对惯性的优化
     std::chrono::steady_clock::time_point t0 = std::chrono::steady_clock::now();
     Optimizer::InertialOptimization(mpAtlas->GetCurrentMap(), mRwg, mScale, mbg, mba, mbMonocular, infoInertial, false, false, priorG, priorA);
 
     std::chrono::steady_clock::time_point t1 = std::chrono::steady_clock::now();
 
+    // 检查优化出来的尺度
     if (mScale<1e-1)
     {
         cout << "scale too small" << endl;
@@ -1336,6 +1383,7 @@ void LocalMapping::InitializeIMU(float priorG, float priorA, bool bFIBA)
 
     // Before this line we are not changing the map
     {
+        // 尺度正常，则利用优化结果进行缩放和旋转，之后进入下一步的处理
         unique_lock<mutex> lock(mpAtlas->GetCurrentMap()->mMutexMapUpdate);
         if ((fabs(mScale - 1.f) > 0.00001) || !mbMonocular) {
             Sophus::SE3f Twg(mRwg.cast<float>().transpose(), Eigen::Vector3f::Zero());
@@ -1343,6 +1391,7 @@ void LocalMapping::InitializeIMU(float priorG, float priorA, bool bFIBA)
             mpTracker->UpdateFrameIMU(mScale, vpKF[0]->GetImuBias(), mpCurrentKeyFrame);
         }
 
+        // 检查IMU是否初始化成功
         // Check if initialization OK
         if (!mpAtlas->isImuInitialized())
             for (int i = 0; i < N; i++) {
@@ -1360,6 +1409,7 @@ void LocalMapping::InitializeIMU(float priorG, float priorA, bool bFIBA)
     }
 
     std::chrono::steady_clock::time_point t4 = std::chrono::steady_clock::now();
+    // 惯性初始化之后进行一次全局BA
     if (bFIBA)
     {
         if (priorA!=0.f)
@@ -1372,6 +1422,7 @@ void LocalMapping::InitializeIMU(float priorG, float priorA, bool bFIBA)
 
     Verbose::PrintMess("Global Bundle Adjustment finished\nUpdating map ...", Verbose::VERBOSITY_NORMAL);
 
+    // 后续更新优化的结果
     // Get Map Mutex
     unique_lock<mutex> lock(mpAtlas->GetCurrentMap()->mMutexMapUpdate);
 
