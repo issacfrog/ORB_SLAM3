@@ -1557,10 +1557,6 @@ Sophus::SE3f Tracking::GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, co
         mCurrentFrame = Frame(mImGray,imDepth,timestamp,mpORBextractorLeft,mpORBVocabulary,mK,mDistCoef,mbf,mThDepth,mpCamera,&mLastFrame,*mpImuCalib);
 
 
-
-
-
-
     mCurrentFrame.mNameFile = filename;
     mCurrentFrame.mnDataset = mnNumDataset;
 
@@ -1817,6 +1813,14 @@ void Tracking::ResetFrameIMU()
 }
 
 /// 核心追踪实现代码
+/**
+ * 1.首先是一些调试处理逻辑
+ * 2.时间同步等等
+ * 3.根据是否有IMU以及传感器的类型，决定调用的tracking方式
+ * 4.如果有IMU则进行预积分处理
+ * 5.几种模式 前后帧匹配TrackReferenceKeyFrame() 带运动模型TrackWithMotionModel() 重定位Relocalization() 带局部地图的投入阿参考ing TrackLocalMap()
+ * 6.几种状态 核心是OK 短时间Lost Lost以及初始化等几种
+ */
 void Tracking::Track()
 {
     /// 1.检查是否需要单步执行
@@ -1884,7 +1888,7 @@ void Tracking::Track()
         }
     }
 
-
+    /// 3.如果带有IMU则进行预积分处理
     if ((mSensor == System::IMU_MONOCULAR || mSensor == System::IMU_STEREO || mSensor == System::IMU_RGBD) && mpLastKeyFrame)
         mCurrentFrame.SetNewBias(mpLastKeyFrame->GetImuBias());
 
@@ -1969,14 +1973,14 @@ void Tracking::Track()
             // you explicitly activate the "only tracking" mode.
             if(mState==OK)
             {
-
+                // 在localmapping模式下，上一帧的处理可能会替换调一些mappoint
                 // Local Mapping might have changed some MapPoints tracked in last frame
                 CheckReplacedInLastFrame();
 
                 if((!mbVelocity && !pCurrentMap->isImuInitialized()) || mCurrentFrame.mnId<mnLastRelocFrameId+2)
                 {
                     Verbose::PrintMess("TRACK: Track with respect to the reference KF ", Verbose::VERBOSITY_DEBUG);
-                    bOK = TrackReferenceKeyFrame();
+                    bOK = TrackReferenceKeyFrame(); // 
                 }
                 else
                 {
@@ -2075,20 +2079,21 @@ void Tracking::Track()
             }
             else
             {
-                if(!mbVO)
+                if(!mbVO)   // 如果不是VO模式
                 {
                     // In last frame we tracked enough MapPoints in the map
                     if(mbVelocity)
                     {
-                        bOK = TrackWithMotionModel();
+                        bOK = TrackWithMotionModel(); // 利用上一帧和速度预测当前帧位姿
                     }
                     else
                     {
-                        bOK = TrackReferenceKeyFrame();
+                        bOK = TrackReferenceKeyFrame(); // 利用参考关键帧和匹配点对当前帧位姿进行优化
                     }
                 }
                 else
                 {
+                    // 同时进行重定位与里程计
                     // In last frame we tracked mainly "visual odometry" points.
 
                     // We compute two camera poses, one from motion model and one doing relocalization.
@@ -2151,7 +2156,7 @@ void Tracking::Track()
         std::chrono::steady_clock::time_point time_StartLMTrack = std::chrono::steady_clock::now();
 #endif
         // If we have an initial estimation of the camera pose and matching. Track the local map.
-        if(!mbOnlyTracking)
+        if(!mbOnlyTracking) // 如果不是单独定位模式
         {
             if(bOK)
             {
@@ -2163,6 +2168,7 @@ void Tracking::Track()
         }
         else
         {
+            // 注意这里的VO实际上是一种比较弱的状态，一般是特征点匹配数量较少，无法进行位姿优化
             // mbVO true means that there are few matches to MapPoints in the map. We cannot retrieve
             // a local map and therefore we do not perform TrackLocalMap(). Once the system relocalizes
             // the camera we will use the local map again.
@@ -2214,7 +2220,7 @@ void Tracking::Track()
                 if(mCurrentFrame.mnId==(mnLastRelocFrameId+mnFramesToResetIMU))
                 {
                     cout << "RESETING FRAME!!!" << endl;
-                    ResetFrameIMU();
+                    ResetFrameIMU();    // 重置IMU具体原因没看到
                 }
                 else if(mCurrentFrame.mnId>(mnLastRelocFrameId+30))
                     mLastBias = mCurrentFrame.mImuBias;
@@ -2325,9 +2331,8 @@ void Tracking::Track()
         mLastFrame = Frame(mCurrentFrame);
     }
 
-
-
-
+    /// 4.如果状态为OK或者RECENTLY_LOST，则存储帧位姿信息
+    // 存储帧位姿信息，用于后续轨迹重建 
     if(mState==OK || mState==RECENTLY_LOST)
     {
         // Store frame pose information to retrieve the complete camera trajectory afterwards.
@@ -2551,7 +2556,6 @@ void Tracking::MonocularInitialization()
         }
     }
 }
-
 
 /// @brief 
 void Tracking::CreateInitialMapMonocular()
@@ -3120,6 +3124,7 @@ bool Tracking::TrackLocalMap()
     }
 }
 
+///
 bool Tracking::NeedNewKeyFrame()
 {
     if((mSensor == System::IMU_MONOCULAR || mSensor == System::IMU_STEREO || mSensor == System::IMU_RGBD) && !mpAtlas->GetCurrentMap()->isImuInitialized())
@@ -3272,6 +3277,7 @@ bool Tracking::NeedNewKeyFrame()
         return false;
 }
 
+/// 创建新的关键帧
 void Tracking::CreateNewKeyFrame()
 {
     if(mpLocalMapper->IsInitializing() && !mpAtlas->isImuInitialized())
@@ -3399,6 +3405,13 @@ void Tracking::CreateNewKeyFrame()
     mpLastKeyFrame = pKF;
 }
 
+/// 搜索局部点
+/**
+ * ​​清理当前帧已匹配的地图点​​
+​​ * 筛选局部地图中可见的候选点​​
+​​ * 根据系统状态动态调整搜索阈值​​
+​​ * 执行投影匹配并更新匹配关系​
+ */
 void Tracking::SearchLocalPoints()
 {
     // Do not search map points already matched
@@ -3416,7 +3429,7 @@ void Tracking::SearchLocalPoints()
                 pMP->IncreaseVisible();
                 pMP->mnLastFrameSeen = mCurrentFrame.mnId;
                 pMP->mbTrackInView = false;
-                pMP->mbTrackInViewR = false;
+                pMP->mbTrackInViewR = false; // 标记为已经处理过
             }
         }
     }
@@ -3433,7 +3446,7 @@ void Tracking::SearchLocalPoints()
         if(pMP->isBad())
             continue;
         // Project (this fills MapPoint variables for matching)
-        if(mCurrentFrame.isInFrustum(pMP,0.5))
+        if(mCurrentFrame.isInFrustum(pMP,0.5))  // 判断点是否在当前帧的视锥内
         {
             pMP->IncreaseVisible();
             nToMatch++;
@@ -3446,6 +3459,7 @@ void Tracking::SearchLocalPoints()
 
     if(nToMatch>0)
     {
+        // 动态调整与之
         ORBmatcher matcher(0.8);
         int th = 1;
         if(mSensor==System::RGBD || mSensor==System::IMU_RGBD)

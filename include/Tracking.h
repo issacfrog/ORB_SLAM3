@@ -128,18 +128,19 @@ public:
         OK_KLT=5
     };
 
-    eTrackingState mState;
-    eTrackingState mLastProcessedState;
+    eTrackingState mState;                  // 当前状态
+    eTrackingState mLastProcessedState;     // 上一次状态
 
     // Input sensor
-    int mSensor;
+    int mSensor;                           // 传感器类型
 
     // Current Frame
-    Frame mCurrentFrame;
-    Frame mLastFrame;
+    Frame mCurrentFrame;                   // 当前帧
+    Frame mLastFrame;                      // 上一帧
 
-    cv::Mat mImGray;
+    cv::Mat mImGray;                       // 灰度图
 
+    // 单目初始化参数
     // Initialization Variables (Monocular)
     std::vector<int> mvIniLastMatches;
     std::vector<int> mvIniMatches;
@@ -158,6 +159,7 @@ public:
     int mTrackedFr;
     bool mbStep;
 
+    // 如果不处理局部地图，那么是纯定位模式
     // True if local mapping is deactivated and we are performing only localization
     bool mbOnlyTracking;
 
@@ -232,7 +234,7 @@ protected:
     bool mbMapUpdated;
 
     // Imu preintegration from last frame
-    IMU::Preintegrated *mpImuPreintegratedFromLastKF;
+    IMU::Preintegrated *mpImuPreintegratedFromLastKF;   // 与积分指针
 
     // Queue of IMU measurements between frames
     std::list<IMU::Point> mlQueueImuData;
