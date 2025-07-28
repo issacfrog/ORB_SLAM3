@@ -347,7 +347,17 @@ bool LoopClosing::CheckNewKeyFrames()
     return(!mlpLoopKeyFrameQueue.empty());
 }
 
-///
+/// 检测到可能回环或地图融合的帧
+/**
+ * 1. 检查是否激活回环检测
+ * 2. 获取当前关键帧
+ * 3. 检查是否需要执行惯性的初始化
+ * 4. 检查是否为双目，且关键帧数量小于5
+ * 5. 检查是否为单目，且关键帧数量小于12
+ * 6. 检测回环或者地图融合 判断条件是多帧几何共视
+ * 7. 如果检测到回环或者地图融合，则返回true
+ * 8. 如果没有检测到回环或者地图融合，则继续检测BoW候选帧
+ */
 bool LoopClosing::NewDetectCommonRegions()
 {
     // To deactivate placerecognition. No loopclosing nor merging will be performed
@@ -365,6 +375,7 @@ bool LoopClosing::NewDetectCommonRegions()
         mpLastMap = mpCurrentKF->GetMap();
     }
 
+    // 需要执行惯性的初始化
     if(mpLastMap->IsInertial() && !mpLastMap->GetIniertialBA2())
     {
         mpKeyFrameDB->add(mpCurrentKF);
@@ -372,6 +383,7 @@ bool LoopClosing::NewDetectCommonRegions()
         return false;
     }
 
+    // 双目需要至少5帧 单目需要至少12帧
     if(mpTracker->mSensor == System::STEREO && mpLastMap->GetAllKeyFrames().size() < 5) //12
     {
         // cout << "LoopClousure: Stereo KF inserted without check: " << mpCurrentKF->mnId << endl;
@@ -398,15 +410,19 @@ bool LoopClosing::NewDetectCommonRegions()
 #ifdef REGISTER_TIMES
     std::chrono::steady_clock::time_point time_StartEstSim3_1 = std::chrono::steady_clock::now();
 #endif
-    if(mnLoopNumCoincidences > 0)
+    // 检测到可能回环的帧
+    if(mnLoopNumCoincidences > 0) // DetectCommonRegionsFromBoW中对mnLoopNumCoincidences进行了赋值
     {
         bCheckSpatial = true;
         // Find from the last KF candidates
+        // 当前帧和上一帧
         Sophus::SE3d mTcl = (mpCurrentKF->GetPose() * mpLoopLastCurrentKF->GetPoseInverse()).cast<double>();
         g2o::Sim3 gScl(mTcl.unit_quaternion(),mTcl.translation(),1.0);
         g2o::Sim3 gScw = gScl * mg2oLoopSlw;
         int numProjMatches = 0;
         vector<MapPoint*> vpMatchedMPs;
+        // 是否存在共视区域
+        // DetectAndReffineSim3FromLastKF进行几何验证
         bool bCommonRegion = DetectAndReffineSim3FromLastKF(mpCurrentKF, mpLoopMatchedKF, gScw, numProjMatches, mvpLoopMPs, vpMatchedMPs);
         if(bCommonRegion)
         {
@@ -419,7 +435,7 @@ bool LoopClosing::NewDetectCommonRegions()
             mg2oLoopSlw = gScw;
             mvpLoopMatchedMPs = vpMatchedMPs;
 
-
+            // 如果连续3帧都存在共视区域，则认为检测到回环
             mbLoopDetected = mnLoopNumCoincidences >= 3;
             mnLoopNumNotFound = 0;
 
@@ -446,6 +462,7 @@ bool LoopClosing::NewDetectCommonRegions()
         }
     }
 
+    // 检测到可能地图融合的帧
     //Merge candidates
     bool bMergeDetectedInKF = false;
     if(mnMergeNumCoincidences > 0)
@@ -495,6 +512,7 @@ bool LoopClosing::NewDetectCommonRegions()
         double timeEstSim3 = std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(time_EndEstSim3_1 - time_StartEstSim3_1).count();
 #endif
 
+    // 如果检测到回环或地图融合，则返回true
     if(mbMergeDetected || mbLoopDetected)
     {
 #ifdef REGISTER_TIMES
@@ -504,6 +522,7 @@ bool LoopClosing::NewDetectCommonRegions()
         return true;
     }
 
+    // 如果没有检测到回环或地图融合，则继续检测BoW候选帧
     //TODO: This is only necessary if we use a minimun score for pick the best candidates
     const vector<KeyFrame*> vpConnectedKeyFrames = mpCurrentKF->GetVectorCovisibleKeyFrames();
 
@@ -515,7 +534,9 @@ bool LoopClosing::NewDetectCommonRegions()
 #ifdef REGISTER_TIMES
         std::chrono::steady_clock::time_point time_StartQuery = std::chrono::steady_clock::now();
 #endif
+        // 检测BoW候选帧
         mpKeyFrameDB->DetectNBestCandidates(mpCurrentKF, vpLoopBowCand, vpMergeBowCand,3);
+
 #ifdef REGISTER_TIMES
         std::chrono::steady_clock::time_point time_EndQuery = std::chrono::steady_clock::now();
 
@@ -527,15 +548,19 @@ bool LoopClosing::NewDetectCommonRegions()
 #ifdef REGISTER_TIMES
         std::chrono::steady_clock::time_point time_StartEstSim3_2 = std::chrono::steady_clock::now();
 #endif
+
+    // 检查BoW候选帧 
     // Check the BoW candidates if the geometric candidate list is empty
-    //Loop candidates
+    // Loop candidates
     if(!bLoopDetectedInKF && !vpLoopBowCand.empty())
     {
+        // 检测回环，条件是没有检测到回环关键帧，且BoW候选帧不为空
         mbLoopDetected = DetectCommonRegionsFromBoW(vpLoopBowCand, mpLoopMatchedKF, mpLoopLastCurrentKF, mg2oLoopSlw, mnLoopNumCoincidences, mvpLoopMPs, mvpLoopMatchedMPs);
     }
     // Merge candidates
     if(!bMergeDetectedInKF && !vpMergeBowCand.empty())
     {
+        // 检测地图融合，条件是没有检测到地图融合关键帧，且BoW候选帧不为空
         mbMergeDetected = DetectCommonRegionsFromBoW(vpMergeBowCand, mpMergeMatchedKF, mpMergeLastCurrentKF, mg2oMergeSlw, mnMergeNumCoincidences, mvpMergeMPs, mvpMergeMatchedMPs);
     }
 
