@@ -31,7 +31,7 @@
 namespace ORB_SLAM3
 {
 
-
+// 构造函数
 Sim3Solver::Sim3Solver(KeyFrame *pKF1, KeyFrame *pKF2, const vector<MapPoint *> &vpMatched12, const bool bFixScale,
                        vector<KeyFrame*> vpKeyFrameMatchedMP):
     mnIterations(0), mnBestInliers(0), mbFixScale(bFixScale),
@@ -146,6 +146,16 @@ void Sim3Solver::SetRansacParameters(double probability, int minInliers, int max
     mnIterations = 0;
 }
 
+/// 迭代优化
+/**
+ * @brief 
+ * 
+ * @param nIterations 
+ * @param bNoMore 
+ * @param vbInliers 
+ * @param nInliers 
+ * @return Eigen::Matrix4f 
+ */
 Eigen::Matrix4f Sim3Solver::iterate(int nIterations, bool &bNoMore, vector<bool> &vbInliers, int &nInliers)
 {
     bNoMore = false;
@@ -215,6 +225,17 @@ Eigen::Matrix4f Sim3Solver::iterate(int nIterations, bool &bNoMore, vector<bool>
     return Eigen::Matrix4f::Identity();
 }
 
+/// 迭代优化
+/**
+ * @brief 
+ * 
+ * @param nIterations RANSAC最大迭代次数
+ * @param bNoMore 由于点数不足或者已达到最大迭代次数而停止外部循环
+ * @param vbInliers 内点标记
+ * @param nInliers 内点数量
+ * @param bConverge 是否收敛
+ * @return Eigen::Matrix4f 
+ */
 Eigen::Matrix4f Sim3Solver::iterate(int nIterations, bool &bNoMore, vector<bool> &vbInliers, int &nInliers, bool &bConverge)
 {
     bNoMore = false;
@@ -222,6 +243,7 @@ Eigen::Matrix4f Sim3Solver::iterate(int nIterations, bool &bNoMore, vector<bool>
     vbInliers = vector<bool>(mN1,false);
     nInliers=0;
 
+    // 如果点数不足，则停止外部循环
     if(N<mRansacMinInliers)
     {
         bNoMore = true;
@@ -237,6 +259,7 @@ Eigen::Matrix4f Sim3Solver::iterate(int nIterations, bool &bNoMore, vector<bool>
 
     Eigen::Matrix4f bestSim3;
 
+    // 迭代次数
     while(mnIterations<mRansacMaxIts && nCurrentIterations<nIterations)
     {
         nCurrentIterations++;
@@ -244,6 +267,7 @@ Eigen::Matrix4f Sim3Solver::iterate(int nIterations, bool &bNoMore, vector<bool>
 
         vAvailableIndices = mvAllIndices;
 
+        // 随机3个点
         // Get min set of points
         for(short i = 0; i < 3; ++i)
         {
@@ -258,10 +282,12 @@ Eigen::Matrix4f Sim3Solver::iterate(int nIterations, bool &bNoMore, vector<bool>
             vAvailableIndices.pop_back();
         }
 
+        // 计算Sim3变换注意这里计算的是P3P
         ComputeSim3(P3Dc1i,P3Dc2i);
 
         CheckInliers();
 
+        // 筛选出最优结果
         if(mnInliersi>=mnBestInliers)
         {
             mvbBestInliers = mvbInliersi;
@@ -299,6 +325,7 @@ Eigen::Matrix4f Sim3Solver::find(vector<bool> &vbInliers12, int &nInliers)
     return iterate(mRansacMaxIts,bFlag,vbInliers12,nInliers);
 }
 
+/// 计算一组3D点的质心
 void Sim3Solver::ComputeCentroid(Eigen::Matrix3f &P, Eigen::Matrix3f &Pr, Eigen::Vector3f &C)
 {
     C = P.rowwise().sum();
@@ -307,7 +334,14 @@ void Sim3Solver::ComputeCentroid(Eigen::Matrix3f &P, Eigen::Matrix3f &Pr, Eigen:
     Pr.col(i) = P.col(i) - C;
 }
 
+/// 计算Sim3变换
 
+/**
+ * @brief Horn 1987 提出的基于四元数的闭式解法
+ *
+ * @param P1 
+ * @param P2 
+ */
 void Sim3Solver::ComputeSim3(Eigen::Matrix3f &P1, Eigen::Matrix3f &P2)
 {
     // Custom implementation of:
@@ -351,22 +385,24 @@ void Sim3Solver::ComputeSim3(Eigen::Matrix3f &P1, Eigen::Matrix3f &P2)
 
     // Step 4: Eigenvector of the highest eigenvalue
     Eigen::EigenSolver<Eigen::Matrix4f> eigSolver;
-    eigSolver.compute(N);
+    eigSolver.compute(N);   // 执行特征分解
 
+    // 获取特征值和特征向量
     Eigen::Vector4f eval = eigSolver.eigenvalues().real();
     Eigen::Matrix4f evec = eigSolver.eigenvectors().real(); //evec[0] is the quaternion of the desired rotation
 
-    int maxIndex; // should be zero
-    eval.maxCoeff(&maxIndex);
-
-    Eigen::Vector3f vec = evec.block<3,1>(1,maxIndex); //extract imaginary part of the quaternion (sin*axis)
+    int maxIndex; // 最大特征值的索引
+    eval.maxCoeff(&maxIndex);   // 获取最大特征值的索引
+    // 特征向量
+    Eigen::Vector3f vec = evec.block<3,1>(1,maxIndex); // 提取四元数的虚部（sin*轴）
 
     // Rotation angle. sin is the norm of the imaginary part, cos is the real part
     double ang=atan2(vec.norm(),evec(0,maxIndex));
 
     vec = 2*ang*vec/vec.norm(); //Angle-axis representation. quaternion angle is the half
-    mR12i = Sophus::SO3f::exp(vec).matrix();
+    mR12i = Sophus::SO3f::exp(vec).matrix();    // 构建旋转
 
+    // Pr1≈s∗R∗Pr2+t
     // Step 5: Rotate set 2
     Eigen::Matrix3f P3 = mR12i*Pr2;
 
@@ -388,10 +424,11 @@ void Sim3Solver::ComputeSim3(Eigen::Matrix3f &P1, Eigen::Matrix3f &P2)
         ms12i = 1.0f;
 
     // Step 7: Translation
-    mt12i = O1 - ms12i * mR12i * O2;
+    mt12i = O1 - ms12i * mR12i * O2;    // 估计平移量
 
     // Step 8: Transformation
-
+    
+    // 构造正向与反向变换
     // Step 8.1 T12
     mT12i.setIdentity();
 
@@ -411,11 +448,17 @@ void Sim3Solver::ComputeSim3(Eigen::Matrix3f &P1, Eigen::Matrix3f &P2)
     mT21i.block<3,1>(0,3) = tinv;
 }
 
-
+/// 检查内点 检查方法是判断相机坐标平面上点的距离
 void Sim3Solver::CheckInliers()
 {
-    vector<Eigen::Vector2f> vP1im2, vP2im1;
-    Project(mvX3Dc2,vP2im1,mT12i,pCamera1);
+    // mvX3Dc1：相机1下的3D点坐标 
+    // mvX3Dc2：相机2下的3D点坐标
+    // mT12i：相机1到相机2的变换矩阵
+    // mT21i：相机2到相机1的变换矩阵
+    // pCamera1：相机1的相机模型
+    // pCamera2：相机2的相机模型
+    vector<Eigen::Vector2f> vP1im2, vP2im1; // 相机坐标系下的2D坐标点
+    Project(mvX3Dc2,vP2im1,mT12i,pCamera1); // 将相机2下的3D点坐标投影到相机1下 得到vP2im1
     Project(mvX3Dc1,vP1im2,mT21i,pCamera2);
 
     mnInliersi=0;
@@ -458,6 +501,7 @@ float Sim3Solver::GetEstimatedScale()
     return mBestScale;
 }
 
+/// 执行投影
 void Sim3Solver::Project(const vector<Eigen::Vector3f> &vP3Dw, vector<Eigen::Vector2f> &vP2D, Eigen::Matrix4f Tcw, GeometricCamera* pCamera)
 {
     Eigen::Matrix3f Rcw = Tcw.block<3,3>(0,0);

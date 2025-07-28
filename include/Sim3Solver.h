@@ -67,11 +67,13 @@ protected:
     KeyFrame* mpKF1;
     KeyFrame* mpKF2;
 
-    std::vector<Eigen::Vector3f> mvX3Dc1;
+    std::vector<Eigen::Vector3f> mvX3Dc1; //关键帧坐标系下的3D坐标点
     std::vector<Eigen::Vector3f> mvX3Dc2;
+    // 关键帧与匹配关系
     std::vector<MapPoint*> mvpMapPoints1;
     std::vector<MapPoint*> mvpMapPoints2;
     std::vector<MapPoint*> mvpMatches12;
+
     std::vector<size_t> mvnIndices1;
     std::vector<size_t> mvSigmaSquare1;
     std::vector<size_t> mvSigmaSquare2;
@@ -88,7 +90,7 @@ protected:
     Eigen::Matrix4f mT12i;
     Eigen::Matrix4f mT21i;
     std::vector<bool> mvbInliersi;
-    int mnInliersi;
+    int mnInliersi; // 内点数量
 
     // Current Ransac State
     int mnIterations;
