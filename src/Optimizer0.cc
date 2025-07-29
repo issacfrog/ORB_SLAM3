@@ -49,6 +49,7 @@ bool sortByVal(const pair<MapPoint*, int> &a, const pair<MapPoint*, int> &b)
     return (a.second < b.second);
 }
 
+// 全局BA优化 实际上调用的BA
 void Optimizer::GlobalBundleAdjustemnt(Map* pMap, int nIterations, bool* pbStopFlag, const unsigned long nLoopKF, const bool bRobust)
 {
     vector<KeyFrame*> vpKFs = pMap->GetAllKeyFrames();
@@ -56,10 +57,20 @@ void Optimizer::GlobalBundleAdjustemnt(Map* pMap, int nIterations, bool* pbStopF
     BundleAdjustment(vpKFs,vpMP,nIterations,pbStopFlag, nLoopKF, bRobust);
 }
 
-
+/// BA优化
+/**
+ * @brief 需要注意 orbslam自己定义的边的类型
+ * @param vpKFs 关键帧
+ * @param vpMP 地图点
+ * @param nIterations 迭代次数 
+ * @param pbStopFlag 停止标志
+ * @param nLoopKF 回环检测的id
+ * @param bRobust 是否使用鲁棒核函数
+ */
 void Optimizer::BundleAdjustment(const vector<KeyFrame *> &vpKFs, const vector<MapPoint *> &vpMP,
                                  int nIterations, bool* pbStopFlag, const unsigned long nLoopKF, const bool bRobust)
 {
+    // 配置优化器
     vector<bool> vbNotIncludedMP;
     vbNotIncludedMP.resize(vpMP.size());
 
@@ -81,38 +92,40 @@ void Optimizer::BundleAdjustment(const vector<KeyFrame *> &vpKFs, const vector<M
 
     long unsigned int maxKFid = 0;
 
+
+    // 边类型设置
     const int nExpectedSize = (vpKFs.size())*vpMP.size();
 
-    vector<ORB_SLAM3::EdgeSE3ProjectXYZ*> vpEdgesMono;
+    vector<ORB_SLAM3::EdgeSE3ProjectXYZ*> vpEdgesMono;  // 单目边
     vpEdgesMono.reserve(nExpectedSize);
 
-    vector<ORB_SLAM3::EdgeSE3ProjectXYZToBody*> vpEdgesBody;
+    vector<ORB_SLAM3::EdgeSE3ProjectXYZToBody*> vpEdgesBody;  // 投影到body系
     vpEdgesBody.reserve(nExpectedSize);
 
-    vector<KeyFrame*> vpEdgeKFMono;
+    vector<KeyFrame*> vpEdgeKFMono;  // 单目边关键帧
     vpEdgeKFMono.reserve(nExpectedSize);
 
-    vector<KeyFrame*> vpEdgeKFBody;
+    vector<KeyFrame*> vpEdgeKFBody;  // 投影到body系关键帧
     vpEdgeKFBody.reserve(nExpectedSize);
 
-    vector<MapPoint*> vpMapPointEdgeMono;
+    vector<MapPoint*> vpMapPointEdgeMono;  // 单目边地图点
     vpMapPointEdgeMono.reserve(nExpectedSize);
 
-    vector<MapPoint*> vpMapPointEdgeBody;
+    vector<MapPoint*> vpMapPointEdgeBody;  // 投影到body系地图点
     vpMapPointEdgeBody.reserve(nExpectedSize);
 
-    vector<g2o::EdgeStereoSE3ProjectXYZ*> vpEdgesStereo;
+    vector<g2o::EdgeStereoSE3ProjectXYZ*> vpEdgesStereo;  // 双目边 
     vpEdgesStereo.reserve(nExpectedSize);
 
-    vector<KeyFrame*> vpEdgeKFStereo;
+    vector<KeyFrame*> vpEdgeKFStereo;  // 双目边关键帧
     vpEdgeKFStereo.reserve(nExpectedSize);
 
-    vector<MapPoint*> vpMapPointEdgeStereo;
+    vector<MapPoint*> vpMapPointEdgeStereo;  // 双目边地图点
     vpMapPointEdgeStereo.reserve(nExpectedSize);
 
 
     // Set KeyFrame vertices
-
+    // 设置关键帧顶点
     for(size_t i=0; i<vpKFs.size(); i++)
     {
         KeyFrame* pKF = vpKFs[i];
@@ -132,6 +145,7 @@ void Optimizer::BundleAdjustment(const vector<KeyFrame *> &vpKFs, const vector<M
     const float thHuber3D = sqrt(7.815);
 
     // Set MapPoint vertices
+    // 设置地图点顶点
     for(size_t i=0; i<vpMP.size(); i++)
     {
         MapPoint* pMP = vpMP[i];
@@ -139,7 +153,7 @@ void Optimizer::BundleAdjustment(const vector<KeyFrame *> &vpKFs, const vector<M
             continue;
         g2o::VertexSBAPointXYZ* vPoint = new g2o::VertexSBAPointXYZ();
         vPoint->setEstimate(pMP->GetWorldPos().cast<double>());
-        const int id = pMP->mnId+maxKFid+1;
+        const int id = pMP->mnId+maxKFid+1; // 关键帧id
         vPoint->setId(id);
         vPoint->setMarginalized(true);
         optimizer.addVertex(vPoint); 
@@ -148,6 +162,8 @@ void Optimizer::BundleAdjustment(const vector<KeyFrame *> &vpKFs, const vector<M
 
         int nEdges = 0;
         //SET EDGES
+        // 对于关键帧，搜索其观测
+        // 单目边、双目边 以及相机投影到body系下的边
         for(map<KeyFrame*,tuple<int,int>>::const_iterator mit=observations.begin(); mit!=observations.end(); mit++)
         {
             KeyFrame* pKF = mit->first;
@@ -159,6 +175,7 @@ void Optimizer::BundleAdjustment(const vector<KeyFrame *> &vpKFs, const vector<M
 
             const int leftIndex = get<0>(mit->second);
 
+            // 单目or双目观测
             if(leftIndex != -1 && pKF->mvuRight[get<0>(mit->second)]<0)
             {
                 const cv::KeyPoint &kpUn = pKF->mvKeysUn[leftIndex];
@@ -166,6 +183,7 @@ void Optimizer::BundleAdjustment(const vector<KeyFrame *> &vpKFs, const vector<M
                 Eigen::Matrix<double,2,1> obs;
                 obs << kpUn.pt.x, kpUn.pt.y;
 
+                // 投影边
                 ORB_SLAM3::EdgeSE3ProjectXYZ* e = new ORB_SLAM3::EdgeSE3ProjectXYZ();
 
                 e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(id)));
@@ -261,8 +279,6 @@ void Optimizer::BundleAdjustment(const vector<KeyFrame *> &vpKFs, const vector<M
             }
         }
 
-
-
         if(nEdges==0)
         {
             optimizer.removeVertex(vPoint);
@@ -287,21 +303,26 @@ void Optimizer::BundleAdjustment(const vector<KeyFrame *> &vpKFs, const vector<M
         KeyFrame* pKF = vpKFs[i];
         if(pKF->isBad())
             continue;
+        // 获取优化器求解后的顶点
         g2o::VertexSE3Expmap* vSE3 = static_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(pKF->mnId));
 
-        g2o::SE3Quat SE3quat = vSE3->estimate();
+        g2o::SE3Quat SE3quat = vSE3->estimate(); // 获取优化器求解后的位姿
         if(nLoopKF==pMap->GetOriginKF()->mnId)
         {
+            // 如果是原点，则直接复制
             pKF->SetPose(Sophus::SE3f(SE3quat.rotation().cast<float>(), SE3quat.translation().cast<float>()));
         }
         else
         {
+            // 非原点则记录BA结果
             pKF->mTcwGBA = Sophus::SE3d(SE3quat.rotation(),SE3quat.translation()).cast<float>();
-            pKF->mnBAGlobalForKF = nLoopKF;
+            pKF->mnBAGlobalForKF = nLoopKF; // 记录回环检测的id
 
             Sophus::SE3f mTwc = pKF->GetPoseInverse();
             Sophus::SE3f mTcGBA_c = pKF->mTcwGBA * mTwc;
             Eigen::Vector3f vector_dist =  mTcGBA_c.translation();
+            // 计算修正前后平移量，由此评估计算是否正常
+            // 背后逻辑是对于小于1的点，认为其是正常的点
             double dist = vector_dist.norm();
             if(dist > 1)
             {
@@ -364,7 +385,7 @@ void Optimizer::BundleAdjustment(const vector<KeyFrame *> &vpKFs, const vector<M
         }
     }
 
-    //Points
+    //Points 地图点直接处理了
     for(size_t i=0; i<vpMP.size(); i++)
     {
         if(vbNotIncludedMP[i])
