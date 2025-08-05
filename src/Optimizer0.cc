@@ -56,7 +56,16 @@ void Optimizer::GlobalBundleAdjustemnt(Map* pMap, int nIterations, bool* pbStopF
     BundleAdjustment(vpKFs,vpMP,nIterations,pbStopFlag, nLoopKF, bRobust);
 }
 
-
+/**
+ * @brief G2O 框架进行全局BA优化
+ * 
+ * @param vpKFs 待优化关键帧集合
+ * @param vpMP 待优化地图点集合
+ * @param nIterations 
+ * @param pbStopFlag 
+ * @param nLoopKF 
+ * @param bRobust 
+ */
 void Optimizer::BundleAdjustment(const vector<KeyFrame *> &vpKFs, const vector<MapPoint *> &vpMP,
                                  int nIterations, bool* pbStopFlag, const unsigned long nLoopKF, const bool bRobust)
 {
@@ -68,7 +77,7 @@ void Optimizer::BundleAdjustment(const vector<KeyFrame *> &vpKFs, const vector<M
     g2o::SparseOptimizer optimizer;
     g2o::BlockSolver_6_3::LinearSolverType * linearSolver;
 
-    linearSolver = new g2o::LinearSolverEigen<g2o::BlockSolver_6_3::PoseMatrixType>();
+    linearSolver = new g2o::LinearSolverEigen<g2o::BlockSolver_6_3::PoseMatrixType>();  // pose为6维 点为3维
 
     g2o::BlockSolver_6_3 * solver_ptr = new g2o::BlockSolver_6_3(linearSolver);
 
@@ -79,16 +88,19 @@ void Optimizer::BundleAdjustment(const vector<KeyFrame *> &vpKFs, const vector<M
     if(pbStopFlag)
         optimizer.setForceStopFlag(pbStopFlag);
 
+    // 记录添加的最大id
     long unsigned int maxKFid = 0;
 
     const int nExpectedSize = (vpKFs.size())*vpMP.size();
 
+    // 记录单目边 到3维坐标
     vector<ORB_SLAM3::EdgeSE3ProjectXYZ*> vpEdgesMono;
     vpEdgesMono.reserve(nExpectedSize);
-
+    
     vector<ORB_SLAM3::EdgeSE3ProjectXYZToBody*> vpEdgesBody;
     vpEdgesBody.reserve(nExpectedSize);
 
+    // 记录单目边 到关键帧
     vector<KeyFrame*> vpEdgeKFMono;
     vpEdgeKFMono.reserve(nExpectedSize);
 
@@ -101,18 +113,19 @@ void Optimizer::BundleAdjustment(const vector<KeyFrame *> &vpKFs, const vector<M
     vector<MapPoint*> vpMapPointEdgeBody;
     vpMapPointEdgeBody.reserve(nExpectedSize);
 
+    // 双目边
     vector<g2o::EdgeStereoSE3ProjectXYZ*> vpEdgesStereo;
     vpEdgesStereo.reserve(nExpectedSize);
-
+    // 关键帧
     vector<KeyFrame*> vpEdgeKFStereo;
     vpEdgeKFStereo.reserve(nExpectedSize);
-
+    // 地图点
     vector<MapPoint*> vpMapPointEdgeStereo;
     vpMapPointEdgeStereo.reserve(nExpectedSize);
 
 
     // Set KeyFrame vertices
-
+    // 关键帧顶点，将每个关键帧添加顶点
     for(size_t i=0; i<vpKFs.size(); i++)
     {
         KeyFrame* pKF = vpKFs[i];
@@ -132,6 +145,7 @@ void Optimizer::BundleAdjustment(const vector<KeyFrame *> &vpKFs, const vector<M
     const float thHuber3D = sqrt(7.815);
 
     // Set MapPoint vertices
+    // 每个地图点添加为顶点
     for(size_t i=0; i<vpMP.size(); i++)
     {
         MapPoint* pMP = vpMP[i];
@@ -146,12 +160,14 @@ void Optimizer::BundleAdjustment(const vector<KeyFrame *> &vpKFs, const vector<M
 
        const map<KeyFrame*,tuple<int,int>> observations = pMP->GetObservations();
 
+        // 地图点和关键帧进行了关联了
         int nEdges = 0;
         //SET EDGES
+        // 设置边的逻辑
         for(map<KeyFrame*,tuple<int,int>>::const_iterator mit=observations.begin(); mit!=observations.end(); mit++)
         {
             KeyFrame* pKF = mit->first;
-            if(pKF->isBad() || pKF->mnId>maxKFid)
+            if(pKF->isBad() || pKF->mnId>maxKFid)   // 好的点，且没有超过最大id
                 continue;
             if(optimizer.vertex(id) == NULL || optimizer.vertex(pKF->mnId) == NULL)
                 continue;
@@ -164,12 +180,13 @@ void Optimizer::BundleAdjustment(const vector<KeyFrame *> &vpKFs, const vector<M
                 const cv::KeyPoint &kpUn = pKF->mvKeysUn[leftIndex];
 
                 Eigen::Matrix<double,2,1> obs;
-                obs << kpUn.pt.x, kpUn.pt.y;
+                obs << kpUn.pt.x, kpUn.pt.y;    // 观测值是2D坐标
 
+                // 单目边 2D像素观测
                 ORB_SLAM3::EdgeSE3ProjectXYZ* e = new ORB_SLAM3::EdgeSE3ProjectXYZ();
 
-                e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(id)));
-                e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(pKF->mnId)));
+                e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(id)));         // 地图点
+                e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(pKF->mnId)));  // 关键帧
                 e->setMeasurement(obs);
                 const float &invSigma2 = pKF->mvInvLevelSigma2[kpUn.octave];
                 e->setInformation(Eigen::Matrix2d::Identity()*invSigma2);
@@ -197,6 +214,7 @@ void Optimizer::BundleAdjustment(const vector<KeyFrame *> &vpKFs, const vector<M
                 const float kp_ur = pKF->mvuRight[get<0>(mit->second)];
                 obs << kpUn.pt.x, kpUn.pt.y, kp_ur;
 
+                // 双目边 左目xy + 右目u
                 g2o::EdgeStereoSE3ProjectXYZ* e = new g2o::EdgeStereoSE3ProjectXYZ();
 
                 e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(id)));
@@ -213,6 +231,7 @@ void Optimizer::BundleAdjustment(const vector<KeyFrame *> &vpKFs, const vector<M
                     rk->setDelta(thHuber3D);
                 }
 
+                // 设置相机内参用于投影 主要是左目特征点向右目特征点的投影
                 e->fx = pKF->fx;
                 e->fy = pKF->fy;
                 e->cx = pKF->cx;
@@ -226,6 +245,8 @@ void Optimizer::BundleAdjustment(const vector<KeyFrame *> &vpKFs, const vector<M
                 vpMapPointEdgeStereo.push_back(pMP);
             }
 
+            // 多个相机，误差类型与前面一样
+            // 右目图像对地图点的重投影误差边
             if(pKF->mpCamera2){
                 int rightIndex = get<1>(mit->second);
 
@@ -277,7 +298,7 @@ void Optimizer::BundleAdjustment(const vector<KeyFrame *> &vpKFs, const vector<M
     // Optimize!
     optimizer.setVerbose(false);
     optimizer.initializeOptimization();
-    optimizer.optimize(nIterations);
+    optimizer.optimize(nIterations);    // 执行优化
     Verbose::PrintMess("BA: End of the optimization", Verbose::VERBOSITY_NORMAL);
 
     // Recover optimized data
@@ -289,6 +310,7 @@ void Optimizer::BundleAdjustment(const vector<KeyFrame *> &vpKFs, const vector<M
             continue;
         g2o::VertexSE3Expmap* vSE3 = static_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(pKF->mnId));
 
+        // 更新KF的位姿
         g2o::SE3Quat SE3quat = vSE3->estimate();
         if(nLoopKF==pMap->GetOriginKF()->mnId)
         {
@@ -303,6 +325,9 @@ void Optimizer::BundleAdjustment(const vector<KeyFrame *> &vpKFs, const vector<M
             Sophus::SE3f mTcGBA_c = pKF->mTcwGBA * mTwc;
             Eigen::Vector3f vector_dist =  mTcGBA_c.translation();
             double dist = vector_dist.norm();
+            // 比对优化前后的位姿距离，如果优化距离大于1m
+            // 则进行进一步的检查
+            // 统计优化点和误差大的点的数量
             if(dist > 1)
             {
                 int numMonoBadPoints = 0, numMonoOptPoints = 0;
@@ -323,14 +348,13 @@ void Optimizer::BundleAdjustment(const vector<KeyFrame *> &vpKFs, const vector<M
                     if(pMP->isBad())
                         continue;
 
-                    if(e->chi2()>5.991 || !e->isDepthPositive())
+                    if(e->chi2()>5.991 || !e->isDepthPositive())    // 卡方
                     {
-                        numMonoBadPoints++;
-
+                        numMonoBadPoints++;  // 单目边 坏点计数
                     }
                     else
                     {
-                        numMonoOptPoints++;
+                        numMonoOptPoints++;  // 单目边 优化点计数
                         vpMonoMPsOpt.push_back(pMP);
                     }
 

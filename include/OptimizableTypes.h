@@ -86,6 +86,12 @@ public:
     g2o::SE3Quat mTrl;
 };
 
+/**
+ * @brief 单目边
+ * VertexSBAPointXYZ 3D地图点 SBA是 Sparse Bundle Adjustment 稀疏捆绑调整的缩写 PointXYZ表征是一个xyz坐标点
+ * VertexSE3Expmap 关键帧相机姿态 SE3表征是一个器流形特性 Expmap表示采用李代数的指数映射（Exponential Map）来进行优化（更新位姿）
+ * Eigen::Vector2d 2D像素观测点的误差 对应的是地图点在相机上投影对应像素坐标的误差
+ */
 class  EdgeSE3ProjectXYZ: public  g2o::BaseBinaryEdge<2, Eigen::Vector2d, g2o::VertexSBAPointXYZ, g2o::VertexSE3Expmap>{
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -124,6 +130,12 @@ public:
 
     bool write(std::ostream& os) const;
 
+    // v2->estimate() 地图点的三维坐标
+    // v1->estimate() 当前关键帧的相机位姿
+    // mTrl 是相机 body frame 到右目（或次相机）frame 的相对位姿
+    // mTrl * v1->estimate() 将地图点变换到右目的坐标系下
+    // .map(v2->estimate()) 将三维点投影到当前相机坐标系中
+    // pCamera->project() 将三维点投影到像素坐标系中
     void computeError()  {
         const g2o::VertexSE3Expmap* v1 = static_cast<const g2o::VertexSE3Expmap*>(_vertices[1]);
         const g2o::VertexSBAPointXYZ* v2 = static_cast<const g2o::VertexSBAPointXYZ*>(_vertices[0]);
