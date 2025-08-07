@@ -545,6 +545,21 @@ public:
 
 
 // Edge inertial whre gravity is included as optimizable variable and it is not supposed to be pointing in -z axis, as well as scale
+/**
+ * @brief 
+ * 多元边 
+ * 残差维度为9 其中位置误差3维、速度误差3维、姿态误差3维
+ * 参考边添加的方式 联合优化的变量包括
+ * 前一帧 POSE(位姿6维)
+ * 前一帧速度
+ * 陀螺漂移
+ * 加速度计零偏
+ * 当前帧POSE
+ * 当前帧速度
+ * 重力方向（2维）
+ * 尺度（1维）
+ * 总计27维
+ */
 class EdgeInertialGS : public g2o::BaseMultiEdge<9,Vector9d>
 {
 public:
